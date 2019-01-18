@@ -1,0 +1,31 @@
+{
+	"repoName": "fpp-plugin-Template",
+	"name": "Template Plugin for FPP Plugin developers",
+	"author": "John Doe (jdoe)",
+	"description": "This template plugin is designed to make it easier for plugin authors to create new FPP Plugins.  You can manually clone the git repository or install the Template Plugin and then go to the plugin's config page and use the form to copy the template into a new plugin directory.",
+	"homeURL": "https://github.com/FalconChristmas/fpp-plugin-Template",
+	"srcURL": "https://github.com/FalconChristmas/fpp-plugin-Template.git",
+	"bugURL": "https://github.com/FalconChristmas/fpp-plugin-Template/issues",
+	"versions": [
+		{
+			"minFPPVersion": 2.0,
+			"maxFPPVersion": 0,
+			"branch": "master",
+			"sha": ""
+		}
+	],
+	"dependencies": {
+	    "plugins": [
+			"fpp-plugin-CoolPlugin1",
+			"fpp-plugin-CoolPlugin2"
+		],
+	    "packages": [
+			"system-package-name1",
+			"system-package-name2"
+		],
+		"scripts": [
+			"Control/script-repository-script1",
+			"PixelOverlay/script-repository-script2"
+		]
+	}
+}
