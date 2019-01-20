@@ -8,8 +8,8 @@
 	"bugURL": "https://github.com/FalconChristmas/fpp-plugin-Template/issues",
 	"versions": [
 		{
-			"minFPPVersion": 2.0,
-			"maxFPPVersion": 0,
+			"minFPPVersion": "2.0",
+			"maxFPPVersion": "0",
 			"branch": "master",
 			"allowUpdates": 1,
 			"sha": "",
