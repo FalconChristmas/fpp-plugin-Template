@@ -6,12 +6,12 @@
 	"homeURL": "https://github.com/FalconChristmas/fpp-plugin-Template",
 	"srcURL": "https://github.com/FalconChristmas/fpp-plugin-Template.git",
 	"bugURL": "https://github.com/FalconChristmas/fpp-plugin-Template/issues",
+	"allowUpdates": 1,
 	"versions": [
 		{
 			"minFPPVersion": "2.0",
 			"maxFPPVersion": "0",
 			"branch": "master",
-			"allowUpdates": 1,
 			"sha": "",
 			"dependencies": {
 			    "plugins": [
