@@ -33,7 +33,7 @@ $menuEntries = Array(
 	Array(
 		'text' => 'Template - Help',
 		'type' => 'help',
-		'page' => 'help.php',
+		'page' => 'help/help.php',
 		'wrap' => 1
 	),
 	Array(
