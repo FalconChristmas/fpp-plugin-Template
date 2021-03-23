@@ -40,7 +40,7 @@ function fppBigButtonsVersion() {
     $result = array();
     $result['version'] = 'fpp-BigButtons v1.2.3';
 
-    return json_encode($result);
+    return json($result);
 }
 
 ?>
