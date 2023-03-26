@@ -53,7 +53,7 @@ $menuEntries = Array(
 ##############################################################################
 # Display the menu entries for this plugin.
 #
-# It is expected that two variables are alread set:
+# It is expected that two variables are already set:
 # $plugin - contains the name of the current plugin directory/repoName
 # $menu - contains the name of the menu section/type
 foreach ($menuEntries as $entry)

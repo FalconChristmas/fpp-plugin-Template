@@ -1,4 +1,4 @@
-<?
+<?php
 /*
 A way for plugins to provide their own PHP API endpoints.
 
