@@ -22,23 +22,23 @@ Here is a simple example which would add a
 */
 
 
-function getEndpointsfppBigButtons() {
+function getEndpointsfpppluginTemplate() {
     $result = array();
 
     $ep = array(
         'method' => 'GET',
         'endpoint' => 'version',
-        'callback' => 'fppBigButtonsVersion');
+        'callback' => 'fpppluginTemplateVersion');
 
     array_push($result, $ep);
 
     return $result;
 }
 
-// GET /api/plugin/fpp-BigButtons/version
-function fppBigButtonsVersion() {
+// GET /api/plugin/fpp-plugin-Template/version
+function fpppluginTemplateVersion() {
     $result = array();
-    $result['version'] = 'fpp-BigButtons v1.2.3';
+    $result['version'] = 'fpp-plugin-Template v1.2.3';
 
     return json($result);
 }
