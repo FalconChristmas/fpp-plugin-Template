@@ -1,4 +1,5 @@
 {
+	"documentation": "https://github.com/FalconChristmas/fpp-plugin-Template/blob/master/PLUGININFO_FORMAT.md",
 	"repoName": "fpp-plugin-Template",
 	"name": "Template Plugin for FPP Plugin developers",
 	"author": "John Doe (jdoe)",
