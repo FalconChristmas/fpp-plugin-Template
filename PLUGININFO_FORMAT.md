@@ -32,11 +32,13 @@ which points at this file.
 | `private` | boolean | optional | Set `true` if the plugin is hosted in a **private** GitHub repo. FPP will clone it using the GitHub username + Personal Access Token configured on the Developer settings page, and show a **Private** badge. |
 | `linkName` | string | optional (legacy) | Creates a symlink in the plugin directory (`<linkName>` → the plugin) on install, removed on uninstall. Used by older plugins whose code expects a directory name different from `repoName`. **Only takes effect when the cloned repo does *not* ship its own `pluginInfo.json`** (i.e. info hosted externally) — for a modern plugin that ships this file, `linkName` does nothing. New plugins normally don't need it. |
 | `versions` | array | **yes** | One or more compatibility entries. See below. |
+| `dependencies` | object | optional | Other things this plugin needs, installed automatically **before** the plugin's own `scripts/fpp_install.sh` runs: `packages` (apt), `scripts` (script repository), and `plugins` (other FPP plugins, installed transitively). See below. |
 
 > **Fields FPP ignores.** Some plugins in the wild also carry a top-level
 > `version` (e.g. `"1.0.1"`) or a `requires` array. **FPP does not read
 > either** — they have no effect. Don't rely on them; use the `versions[]`
-> entries for compatibility and `scripts/fpp_install.sh` for dependencies.
+> entries for compatibility and the `dependencies` block (below) plus
+> `scripts/fpp_install.sh` for dependencies.
 
 ---
 
@@ -58,7 +60,6 @@ whose FPP-version range and platform match** the machine you're on. That entry's
 | `sha` | string | **yes** | Specific commit to pin to. Use `""` (empty string) to always install the **latest** commit on `branch`. Pin a real SHA to freeze an entry to a known-good commit (typical for old FPP majors you no longer update). |
 | `allowUpdates` | integer (`0`/`1`) | optional | Per-version override of the top-level `allowUpdates`. Set `0` on a frozen/pinned entry so FPP won't try to pull newer commits into an old FPP release. |
 | `platforms` | array of strings | optional | Restrict this entry to specific hardware. If present, the entry only matches when the running platform is in the list. If omitted, the entry matches **all** platforms. See below. |
-| `dependencies` | object | optional | **Reserved — not currently used by FPP** (see below). |
 
 ### `minFPPVersion` / `maxFPPVersion` semantics
 
@@ -102,17 +103,22 @@ FPP runs on very different hardware. Use `platforms` on a version entry to keep 
 build off boards it can't run on. The strings must **exactly match the platform
 name FPP reports** (the contents of `/etc/fpp/platform` on the device).
 
-Platform names referenced in the FPP UI code include:
+The value FPP writes to `/etc/fpp/platform` is one of a fixed set:
 
-| Value in `platforms` | Hardware |
+| Value in `platforms` | Platform |
 |----------------------|----------|
 | `"Raspberry Pi"` | Raspberry Pi boards |
 | `"BeagleBone Black"` | BeagleBone Black |
 | `"BeagleBone 64"` | BeagleBone 64 |
+| `"Armbian"` | Armbian-based SBCs |
+| `"Debian"` | Generic Debian |
+| `"Ubuntu"` | Generic Ubuntu |
+| `"Fedora"` | Fedora |
+| `"MacOS"` | macOS (native) |
+| `"UNKNOWN"` | Unrecognized platform |
 
-Other platform strings FPP emits are shown verbatim in the compatibility notice.
-This table lists the values the UI special-cases; confirm the exact string for
-any other target against `/etc/fpp/platform` on that device before relying on it.
+Match the string exactly, and confirm it against `/etc/fpp/platform` on the
+target device before relying on it.
 
 In practice `platforms` is used sparingly — e.g. `Dynamic_RDS` and
 `fpp-node-red` both restrict to `[ "Raspberry Pi" ]` because they rely on
@@ -132,24 +138,64 @@ Example — a version that only installs on Raspberry Pi:
 
 ---
 
-## `dependencies` (reserved — currently unused)
+## `dependencies`
 
-The template includes a `dependencies` object with `plugins`, `packages`, and
-`scripts` arrays:
+A top-level `dependencies` object lets a plugin declare things it needs. FPP
+installs them **automatically, before the plugin's own `scripts/fpp_install.sh`
+runs**, so your install script can rely on them being present:
+
+> **Requires FPP 10.0 or newer.** Automatic installation of the `dependencies`
+> block is only implemented in FPP 10+. On FPP 9 and earlier the block is
+> **silently ignored** (FPP never errors on it — it just isn't read). If your
+> plugin also supports older FPP releases, install those dependencies from your
+> own `scripts/fpp_install.sh` as well so they're covered there; on FPP 10+ the
+> declared packages are additionally tracked and reference-counted as described
+> below.
 
 ```json
 "dependencies": {
-    "plugins":  [ "fpp-plugin-CoolPlugin1" ],
     "packages": [ "system-package-name1" ],
-    "scripts":  [ "Control/script-repository-script1" ]
+    "scripts":  [ "Control/script-repository-script1" ],
+    "plugins":  [ "fpp-plugin-CoolPlugin1" ]
 }
 ```
 
-**No current FPP code reads this block** — it is reserved for possible future
-use. To install real dependencies today, do it from your plugin's own
-`scripts/fpp_install.sh`, which FPP runs automatically after cloning the plugin
-(via `scripts/install_plugin`). Put `apt` package installs, extra setup, etc.
-there.
+They are resolved in this order — **packages → scripts → plugins**:
+
+| Key | Meaning |
+|-----|---------|
+| `packages` | System (apt) packages. FPP runs `apt-get update` then installs each one, and records that **this plugin** requested it. |
+| `scripts` | Script-repository entries in `"Category/file"` form (the same layout as the **Content Setup → Script Repository** page, backed by `FalconChristmas/fpp-scripts`). Each is downloaded into your scripts directory; note repository scripts may run their own `# InstallAction:` steps on install. |
+| `plugins` | Other FPP plugins, by `repoName`. Each is cloned and installed the same way (its own dependencies resolved too), then its `fpp_install.sh` runs. The name **must exist in [`fpp-data/pluginList.json`](https://github.com/FalconChristmas/fpp-data/blob/master/pluginList.json)** — arbitrary URLs are not accepted here. Dependency chains are cycle-guarded, and an already-installed dependency is left as-is. |
+
+> **`packages` needs a Debian-family platform** (Raspberry Pi, BeagleBone,
+> Armbian, Debian, Ubuntu). On platforms without apt (Fedora, macOS) FPP
+> **refuses to install a plugin that declares required packages** rather than
+> leave it half-installed — so if your plugin genuinely needs packages, also
+> restrict it to the supported hardware with `platforms[]`.
+
+### Package ownership and removal
+
+Package dependencies are **reference-counted**. FPP tracks every requester of a
+package (the literal `"user"` for anything installed from the Package Manager
+page, or a plugin's `repoName` for a package installed as its dependency). When
+a plugin is **uninstalled**, its claim on each of its declared packages is
+dropped, and a package is only actually `apt-get remove`d once **nothing else
+still needs it** — so a package shared by two plugins, or one you also installed
+yourself, stays put. This bookkeeping lives in
+`/home/fpp/media/config/userpackages.json`, which is also what FPP replays to
+reinstall your packages after an fppos OS upgrade.
+
+Dependency **scripts and plugins are *not* auto-removed** on uninstall (a script
+may have been customized, and a dependency plugin may be useful on its own) —
+only packages are reference-counted and cleaned up.
+
+### Still use `fpp_install.sh` for the rest
+
+`dependencies` is for declaring named packages/scripts/plugins. Anything else
+your plugin needs at install time — building code, downloading assets, writing
+config — still belongs in your own `scripts/fpp_install.sh`, which FPP runs
+after the dependencies are in place.
 
 ---
 
