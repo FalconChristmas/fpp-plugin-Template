@@ -7,6 +7,7 @@
 	"homeURL": "https://github.com/FalconChristmas/fpp-plugin-Template",
 	"srcURL": "https://github.com/FalconChristmas/fpp-plugin-Template.git",
 	"bugURL": "https://github.com/FalconChristmas/fpp-plugin-Template/issues",
+	"iconURL": "https://raw.githubusercontent.com/FalconChristmas/fpp-plugin-Template/master/icon.png",
 	"allowUpdates": 1,
 	"versions": [
 		{
