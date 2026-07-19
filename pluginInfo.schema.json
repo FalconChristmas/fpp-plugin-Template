@@ -170,7 +170,7 @@
                 "python": {
                     "type": "array",
                     "items": { "type": "string" },
-                    "description": "Python (PyPI) packages, installed via `uv add` into a venv in the plugin's own directory (not system-wide, not reference-counted). uv ships by default with FPP."
+                    "description": "Python (PyPI) packages, installed via `uv pip install --system` into FPP's system Python (not isolated per plugin, not reference-counted). uv ships by default with FPP."
                 },
                 "scripts": {
                     "type": "array",

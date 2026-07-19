@@ -252,13 +252,21 @@ locations.
 6.1 Declare apt packages, Python (PyPI) packages, script-repository scripts, and
 other required plugins in the top-level `dependencies` block of `pluginInfo.json`
 (see `PLUGININFO_FORMAT.md`). FPP installs them before your `fpp_install.sh` runs —
-Python packages via `uv add` into a venv it creates in your plugin's own directory
-(`dependencies.python`), which your scripts can then use directly
-(`"$SCRIPT_DIR/.venv/bin/python3"` — `uv`'s own default venv name, not
-author-chosen). Prefer this over installing Python packages yourself in
-`fpp_install.sh`. A specific `versions[]` entry may also carry its own
-`dependencies`, additional to the top-level ones, for something that differs
-between FPP majors (e.g. a renamed apt package) — see `PLUGININFO_FORMAT.md`.
+Python packages via `uv pip install --system` (`dependencies.python`), straight
+into FPP's system Python, which your scripts can then use directly via the plain
+`python3` on PATH — no per-plugin venv, no `"$SCRIPT_DIR/.venv/..."` indirection.
+Prefer this over installing Python packages yourself in `fpp_install.sh`. A
+specific `versions[]` entry may also carry its own `dependencies`, additional to
+the top-level ones, for something that differs between FPP majors (e.g. a
+renamed apt package) — see `PLUGININFO_FORMAT.md`.
+
+> **Python dependencies are installed system-wide, not per-plugin.** Unlike
+> `packages` (apt), they are not reference-counted or isolated: two plugins
+> declaring the same package share one system install, and a real version
+> conflict between two plugins' declared `python` deps will surface as an
+> install failure rather than staying silently isolated. Pin loosely
+> (`requests`, not `requests==2.31.0`) unless you specifically need an exact
+> version, to minimize collisions with other plugins.
 
 > **`dependencies` is FPP 10+ only, today.** FPP 9 and earlier silently ignore
 > the whole block. If you still support FPP 9/8/older, keep installing those
@@ -270,8 +278,9 @@ between FPP majors (e.g. a renamed apt package) — see `PLUGININFO_FORMAT.md`.
 6.2 **If you need to install something ad-hoc from `fpp_install.sh`** (beyond
 what's declared in `dependencies`), use only `apt-get`, `npm`, or `uv` — no
 `curl|bash` bootstrappers, and **never** `pip install --break-system-packages`,
-which corrupts the system Python. For Python, use `uv` (it manages its own
-isolated environment for you) instead of bare `pip`.
+which corrupts the system Python. For Python, use `uv pip install --system`
+(PEP 668-safe) instead of bare `pip` — but prefer declaring it in
+`dependencies.python` (§6.1) over doing this ad hoc at all.
 
 6.3 Anything else your install genuinely needs belongs in `fpp_install.sh`, and
 stays inside your plugin directory.

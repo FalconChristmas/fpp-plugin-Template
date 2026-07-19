@@ -266,7 +266,7 @@ They are resolved in this order — **packages → python → scripts → plugin
 | Key | Meaning |
 |-----|---------|
 | `packages` | System (apt) packages. FPP runs `apt-get update` then installs each one, and records that **this plugin** requested it. |
-| `python` | Python (PyPI) packages, installed with `uv add` into a venv FPP creates in **your plugin's own directory** (not system-wide, not reference-counted — each plugin gets its own isolated environment; `uv init` runs once, on first use). Your scripts run against it via `"$SCRIPT_DIR/.venv/bin/python3"` (`uv`'s own default venv name — see `PLUGIN_GUIDELINES.md` §6.1). `uv` ships by default with FPP. |
+| `python` | Python (PyPI) packages, installed with `uv pip install --system` straight into FPP's **system** Python (not isolated per plugin, not reference-counted — a package shared by two plugins is just one shared install). Your scripts run against it via the plain `python3` on PATH (see `PLUGIN_GUIDELINES.md` §6.1). `uv` ships by default with FPP. |
 | `scripts` | Script-repository entries in `"Category/file"` form (the same layout as the **Content Setup → Script Repository** page, backed by `FalconChristmas/fpp-scripts`). Each is downloaded into your scripts directory; note repository scripts may run their own `# InstallAction:` steps on install. |
 | `plugins` | Other FPP plugins, by `repoName`. Each is cloned and installed the same way (its own dependencies resolved too), then its `fpp_install.sh` runs. The name **must exist in [`fpp-data/pluginList.json`](https://github.com/FalconChristmas/fpp-data/blob/master/pluginList.json)** — arbitrary URLs are not accepted here. Dependency chains are cycle-guarded, and an already-installed dependency is left as-is. |
 
