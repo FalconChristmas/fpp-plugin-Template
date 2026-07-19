@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # fpp-plugin-Template install script
 

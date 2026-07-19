@@ -7,9 +7,15 @@
 # wrap - 0/1 to hide or display the FPP header, menu, and footer on this page.
 #        This does not apply for pages which begin with http:// or https://
 
-# Comment out sub arrays to not display an item under a menu or add your own
-# entries to display additional menu items such as the 3 items under the
-# help menu in this example template.
+# PLUGIN_GUIDELINES.md #9.1: at most ONE entry per type (status/content/output/
+# help) - a plugin may appear under multiple areas, just never twice within the
+# same one. If you have several things a user might want under one area (a help
+# page, a home-page link, a credits page, ...), put them all on one page instead
+# of adding an entry per page - see about.php, which folds help text, the repo
+# link, and credits into a single page for the one 'help' entry below.
+#
+# Comment out sub arrays to not display an item under a menu; uncomment at most
+# one of 'content'/'output' if your plugin needs one of those areas too.
 
 $menuEntries = Array(
 	Array(
@@ -32,18 +38,6 @@ $menuEntries = Array(
 #	),
 	Array(
 		'text' => 'Template - Help',
-		'type' => 'help',
-		'page' => 'help/help.php',
-		'wrap' => 1
-	),
-	Array(
-		'text' => 'Template - Home',
-		'type' => 'help',
-		'page' => 'https://github.com/FalconChristmas/fpp-plugin-Template',
-		'wrap' => 1
-	),
-	Array(
-		'text' => 'Template - About',
 		'type' => 'help',
 		'page' => 'about.php',
 		'wrap' => 1

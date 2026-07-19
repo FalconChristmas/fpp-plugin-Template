@@ -1,0 +1,160 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://raw.githubusercontent.com/FalconChristmas/fpp-plugin-Template/master/pluginInfo.schema.json",
+    "title": "FPP pluginInfo.json",
+    "description": "Metadata file every FPP plugin ships in its repository root. Prose reference: PLUGININFO_FORMAT.md in this repo. FPP ignores unknown top-level keys, so this schema is intentionally lenient (additionalProperties allowed) and validates the keys FPP actually reads.",
+    "type": "object",
+    "required": ["repoName", "name", "srcURL", "versions"],
+    "properties": {
+        "repoName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Unique identifier and on-disk install directory name. Keep it filesystem/shell safe. Must match the name in fpp-data/pluginList.json.",
+            "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Human-readable title shown on the plugin card."
+        },
+        "author": {
+            "type": "string",
+            "description": "Author name / handle."
+        },
+        "description": {
+            "type": "string",
+            "description": "Short description shown on the plugin card."
+        },
+        "homeURL": {
+            "type": "string",
+            "format": "uri",
+            "description": "Project home page; rendered as the home link."
+        },
+        "srcURL": {
+            "type": "string",
+            "format": "uri",
+            "description": "Git clone URL (normally ending in .git). FPP clones this to install."
+        },
+        "bugURL": {
+            "type": "string",
+            "format": "uri",
+            "description": "Issue tracker URL; rendered as Report a Bug."
+        },
+        "iconURL": {
+            "type": "string",
+            "format": "uri",
+            "description": "Icon URL (PNG, 128x128 or 256x256). FPP prefers a local icon.png in the repo root and falls back to this."
+        },
+        "allowUpdates": {
+            "type": "integer",
+            "enum": [0, 1],
+            "description": "0 hides in-place update buttons (install-once plugins). Omitted = allowed. Can be overridden per version."
+        },
+        "minMemoryMB": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Default minimum system RAM (MB) across all versions. Below this, FPP flags the plugin and hides it on the Basic UI level. Can be overridden per version."
+        },
+        "minCpuCores": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Default minimum recommended CPU cores across all versions. Below this, FPP flags the plugin and hides it on the Basic UI level. Can be overridden per version."
+        },
+        "private": {
+            "type": "boolean",
+            "description": "true if hosted in a private GitHub repo; installed with the credentials on the Developer settings page."
+        },
+        "linkName": {
+            "type": "string",
+            "description": "Legacy: creates a symlink on install. Only takes effect when the cloned repo does NOT ship its own pluginInfo.json. New plugins rarely need it."
+        },
+        "delist": {
+            "type": "boolean",
+            "description": "Set true to request removal from FPP's Plugin Manager list (retire the plugin). Because setting it requires write access to your repo, it also serves as proof of ownership for a de-list request. Existing installs are unaffected."
+        },
+        "versions": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Compatibility entries. FPP installs the first entry whose FPP-version range and platform match the device.",
+            "items": { "$ref": "#/$defs/versionEntry" }
+        },
+        "dependencies": {
+            "$ref": "#/$defs/dependencies",
+            "description": "Things installed automatically BEFORE the plugin's own scripts/fpp_install.sh (FPP 10+). Must be TOP-LEVEL; FPP does not read a dependencies block nested inside a versions[] entry."
+        }
+    },
+    "$defs": {
+        "platform": {
+            "type": "string",
+            "description": "Must exactly match the value FPP writes to /etc/fpp/platform.",
+            "enum": [
+                "Raspberry Pi",
+                "BeagleBone Black",
+                "BeagleBone 64",
+                "Armbian",
+                "Debian",
+                "Ubuntu",
+                "Fedora",
+                "MacOS",
+                "UNKNOWN"
+            ]
+        },
+        "versionEntry": {
+            "type": "object",
+            "required": ["minFPPVersion", "maxFPPVersion", "branch", "sha"],
+            "properties": {
+                "minFPPVersion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Minimum FPP version this entry supports, e.g. \"9.0\".",
+                    "pattern": "^[0-9]+(\\.[0-9]+)*$"
+                },
+                "maxFPPVersion": {
+                    "type": "string",
+                    "description": "Maximum FPP version. \"0\", \"0.0\" or \"\" mean open-ended (valid through the rest of the current major series).",
+                    "pattern": "^([0-9]+(\\.[0-9]+)*)?$"
+                },
+                "branch": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Git branch to check out for this entry."
+                },
+                "sha": {
+                    "type": "string",
+                    "description": "Commit to pin to. \"\" installs the latest commit on branch."
+                },
+                "allowUpdates": {
+                    "type": "integer",
+                    "enum": [0, 1],
+                    "description": "Per-version override of the top-level allowUpdates."
+                },
+                "platforms": {
+                    "type": "array",
+                    "description": "Restrict this entry to specific hardware. Omit to match all platforms.",
+                    "items": { "$ref": "#/$defs/platform" }
+                }
+            }
+        },
+        "dependencies": {
+            "type": "object",
+            "description": "Resolved in order: packages -> scripts -> plugins.",
+            "properties": {
+                "packages": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "System (apt) packages. Reference-counted per requester. Needs a Debian-family platform."
+                },
+                "scripts": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Script-repository entries in \"Category/file\" form."
+                },
+                "plugins": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Other FPP plugins by repoName. Each must exist in fpp-data/pluginList.json."
+                }
+            }
+        }
+    }
+}

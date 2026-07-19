@@ -15,6 +15,15 @@ which points at this file.
 > separate Markdown file instead of as comments in the JSON. FPP only reads the
 > keys it knows about, so extra keys (like `_documentation`) are ignored safely.
 
+> **Machine-readable schema.** A JSON Schema for this format lives alongside this
+> file:
+> [`pluginInfo.schema.json`](https://github.com/FalconChristmas/fpp-plugin-Template/blob/master/pluginInfo.schema.json).
+> Point your editor at it for validation and autocomplete, e.g. add
+> `"$schema": "https://raw.githubusercontent.com/FalconChristmas/fpp-plugin-Template/master/pluginInfo.schema.json"`
+> as the first key of your `pluginInfo.json` (FPP ignores the unknown `$schema`
+> key). It is intentionally lenient — it validates the keys FPP reads and allows
+> extra ones — and it is the machine-checkable counterpart to this prose.
+
 ---
 
 ## Top-level fields
@@ -30,8 +39,11 @@ which points at this file.
 | `bugURL` | string | recommended | Issue tracker URL. Rendered as the **Report a Bug** link. |
 | `iconURL` | string | optional | Icon URL. Icon should be on root repo (to render when installed on offline devices) named icon.png 128x128 or 256x256 |
 | `allowUpdates` | integer (`0`/`1`) | optional | Controls whether FPP offers in-place git updates for the installed plugin. When omitted it is treated as allowed. Set to `0` to hide the **Update Now** / **Check for Updates** buttons (install-once plugins). Can also be set per-version inside `versions[]` (the per-version value takes effect for that version). |
+| `minMemoryMB` | integer | optional | Minimum system RAM (MB) the plugin needs to run acceptably, across all versions. If the device has less, FPP flags it (and hides it on the Basic UI level). See **Resource hints** below. |
+| `minCpuCores` | integer | optional | Minimum recommended CPU cores, across all versions. If the device has fewer, FPP flags it (and hides it on the Basic UI level). |
 | `private` | boolean | optional | Set `true` if the plugin is hosted in a **private** GitHub repo. FPP will clone it using the GitHub username + Personal Access Token configured on the Developer settings page, and show a **Private** badge. |
 | `linkName` | string | optional (legacy) | Creates a symlink in the plugin directory (`<linkName>` → the plugin) on install, removed on uninstall. Used by older plugins whose code expects a directory name different from `repoName`. **Only takes effect when the cloned repo does *not* ship its own `pluginInfo.json`** (i.e. info hosted externally) — for a modern plugin that ships this file, `linkName` does nothing. New plugins normally don't need it. |
+| `delist` | boolean | optional | Set `true` to request removal from FPP's Plugin Manager list (retire the plugin). Existing installs are unaffected. Because only someone with write access to your repo can set it, it also proves ownership for a de-list request. |
 | `versions` | array | **yes** | One or more compatibility entries. See below. |
 | `dependencies` | object | optional | Other things this plugin needs, installed automatically **before** the plugin's own `scripts/fpp_install.sh` runs: `packages` (apt), `scripts` (script repository), and `plugins` (other FPP plugins, installed transitively). See below. |
 
@@ -134,6 +146,56 @@ Example — a version that only installs on Raspberry Pi:
     "branch": "master",
     "sha": "",
     "platforms": [ "Raspberry Pi" ]
+}
+```
+
+---
+
+## Resource hints
+
+FPP runs on hardware ranging from a Pi Zero / BeagleBone (≈512 MB RAM, 1 core) up
+to a Pi 5 / CM5 (2–8 GB, 4 cores). A demanding plugin can starve a low-end board
+and disrupt a running show. A plugin may **optionally** declare the minimums it
+needs so the Plugin Manager can steer users away from installs their device can't
+run well.
+
+> **Both fields are optional, self-reported, and fully backward-compatible.** A
+> plugin that declares neither is treated as unconstrained, so existing plugins
+> are unaffected. FPP **never hard-blocks** on these values — at most it hides a
+> plugin from the Basic UI level and asks for confirmation on higher levels.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `minMemoryMB` | integer | Minimum RAM (MB) to run acceptably. |
+| `minCpuCores` | integer | Minimum recommended CPU cores. |
+
+The fields live at the **top level** of `pluginInfo.json` (next to `allowUpdates`),
+not on individual `versions[]` entries — they describe the plugin as a whole, and
+there is no per-version override, so you declare them once rather than repeating
+them on every entry.
+
+How FPP compares them against the device (total RAM + CPU cores, detected
+automatically):
+
+- **Advisory badge.** When a minimum isn't met, a muted `May exceed this device`
+  badge appears on the plugin card / detail view.
+- **Basic UI level hides it.** If `minMemoryMB` or `minCpuCores` exceeds the
+  device, the plugin is hidden on the Basic UI level (including from the Popular
+  strip) so casual users never install something that would starve their board.
+- **Advanced / Developer see it with a confirm.** The plugin stays visible with
+  the badge, and installing it pops a confirmation noting the shortfall (the
+  values are self-reported, and a power user may know their setup is fine).
+
+Example — a plugin that wants 1 GB RAM and 2 CPU cores to run:
+
+```json
+{
+    "minFPPVersion": "9.0",
+    "maxFPPVersion": "0",
+    "branch": "master",
+    "sha": "",
+    "minMemoryMB": 1024,
+    "minCpuCores": 2
 }
 ```
 
