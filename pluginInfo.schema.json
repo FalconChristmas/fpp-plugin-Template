@@ -2,9 +2,10 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://raw.githubusercontent.com/FalconChristmas/fpp-plugin-Template/master/pluginInfo.schema.json",
     "title": "FPP pluginInfo.json",
-    "description": "Metadata file every FPP plugin ships in its repository root. Prose reference: PLUGININFO_FORMAT.md in this repo. FPP ignores unknown top-level keys, so this schema is intentionally lenient (additionalProperties allowed) and validates the keys FPP actually reads.",
+    "description": "Metadata file every FPP plugin ships in its repository root. Prose reference: PLUGININFO_FORMAT.md in this repo. Strictly validated: every field below is the complete recognized set, including 'version'/'requires' (legacy, ignored by FPP at runtime but explicitly allowed here so a plugin that still carries them from an older template doesn't fail validation) -- anything else is rejected.",
     "type": "object",
-    "required": ["repoName", "name", "srcURL", "versions"],
+    "required": ["repoName", "name", "author", "description", "homeURL", "srcURL", "bugURL", "versions"],
+    "additionalProperties": false,
     "properties": {
         "repoName": {
             "type": "string",
@@ -19,25 +20,30 @@
         },
         "author": {
             "type": "string",
+            "minLength": 1,
             "description": "Author name / handle."
         },
         "description": {
             "type": "string",
+            "minLength": 1,
             "description": "Short description shown on the plugin card."
         },
         "homeURL": {
             "type": "string",
             "format": "uri",
+            "pattern": "^https?://",
             "description": "Project home page; rendered as the home link."
         },
         "srcURL": {
             "type": "string",
             "format": "uri",
-            "description": "Git clone URL (normally ending in .git). FPP clones this to install."
+            "pattern": "^https://(www\\.)?github\\.com/",
+            "description": "Git clone URL (normally ending in .git). FPP clones this to install. Must be a github.com repo -- that's the only source FPP plugins support, and this is the trust anchor for the Official badge."
         },
         "bugURL": {
             "type": "string",
             "format": "uri",
+            "pattern": "^https?://",
             "description": "Issue tracker URL; rendered as Report a Bug."
         },
         "iconURL": {
@@ -80,7 +86,19 @@
         },
         "dependencies": {
             "$ref": "#/$defs/dependencies",
-            "description": "Things installed automatically BEFORE the plugin's own scripts/fpp_install.sh (FPP 10+). Must be TOP-LEVEL; FPP does not read a dependencies block nested inside a versions[] entry."
+            "description": "Things installed automatically BEFORE the plugin's own scripts/fpp_install.sh (FPP 10+). Applies to every entry in versions[]. A versions[] entry may also declare its own 'dependencies' (see versionEntry) with items ADDITIONAL to this top-level set for that entry only -- e.g. a package name that differs between the FPP9 and FPP10 image."
+        },
+        "documentation": {
+            "type": "string",
+            "format": "uri",
+            "description": "Optional URL to human documentation for this plugin (e.g. a guide/README elsewhere). Purely informational -- not read or rendered by FPP itself."
+        },
+        "version": {
+            "description": "IGNORED. FPP does not read a top-level 'version' -- use versions[] entries for compatibility instead. Allowed here only so a plugin carrying it from an older template doesn't fail validation; don't add it to a new plugin."
+        },
+        "requires": {
+            "type": "array",
+            "description": "IGNORED. FPP does not read a top-level 'requires' -- declare needs in the 'dependencies' block instead. Allowed here only so a plugin carrying it from an older template doesn't fail validation; don't add it to a new plugin."
         }
     },
     "$defs": {
@@ -102,6 +120,7 @@
         "versionEntry": {
             "type": "object",
             "required": ["minFPPVersion", "maxFPPVersion", "branch", "sha"],
+            "additionalProperties": false,
             "properties": {
                 "minFPPVersion": {
                     "type": "string",
@@ -132,17 +151,26 @@
                     "type": "array",
                     "description": "Restrict this entry to specific hardware. Omit to match all platforms.",
                     "items": { "$ref": "#/$defs/platform" }
+                },
+                "dependencies": {
+                    "$ref": "#/$defs/dependencies",
+                    "description": "Dependencies ADDITIONAL to the top-level dependencies block, installed only when THIS entry is the one selected for the running FPP version/platform (FPP 10+)."
                 }
             }
         },
         "dependencies": {
             "type": "object",
-            "description": "Resolved in order: packages -> scripts -> plugins.",
+            "description": "Resolved in order: packages -> python -> scripts -> plugins.",
             "properties": {
                 "packages": {
                     "type": "array",
                     "items": { "type": "string" },
                     "description": "System (apt) packages. Reference-counted per requester. Needs a Debian-family platform."
+                },
+                "python": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Python (PyPI) packages, installed via `uv add` into a venv in the plugin's own directory (not system-wide, not reference-counted). uv ships by default with FPP."
                 },
                 "scripts": {
                     "type": "array",

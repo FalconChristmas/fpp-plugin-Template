@@ -249,9 +249,23 @@ locations.
 
 ### 6. Dependencies
 
-6.1 Declare apt packages, script-repository scripts, and other required plugins in
-the top-level `dependencies` block of `pluginInfo.json` (see `PLUGININFO_FORMAT.md`).
-FPP installs them before your `fpp_install.sh` runs.
+6.1 Declare apt packages, Python (PyPI) packages, script-repository scripts, and
+other required plugins in the top-level `dependencies` block of `pluginInfo.json`
+(see `PLUGININFO_FORMAT.md`). FPP installs them before your `fpp_install.sh` runs —
+Python packages via `uv add` into a venv it creates in your plugin's own directory
+(`dependencies.python`), which your scripts can then use directly
+(`"$SCRIPT_DIR/.venv/bin/python3"` — `uv`'s own default venv name, not
+author-chosen). Prefer this over installing Python packages yourself in
+`fpp_install.sh`. A specific `versions[]` entry may also carry its own
+`dependencies`, additional to the top-level ones, for something that differs
+between FPP majors (e.g. a renamed apt package) — see `PLUGININFO_FORMAT.md`.
+
+> **`dependencies` is FPP 10+ only, today.** FPP 9 and earlier silently ignore
+> the whole block. If you still support FPP 9/8/older, keep installing those
+> same things from `scripts/fpp_install.sh` too — `dependencies` is additive
+> for FPP 10+ users, not a replacement, until pre-10 support is dropped.
+> Expect FPP 11/12 to be when a full migration off manual `fpp_install.sh`
+> installs gets encouraged.
 
 6.2 **If you need to install something ad-hoc from `fpp_install.sh`** (beyond
 what's declared in `dependencies`), use only `apt-get`, `npm`, or `uv` — no

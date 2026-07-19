@@ -32,6 +32,9 @@
 			"system-package-name1",
 			"system-package-name2"
 		],
+		"python": [
+			"python-package-name1"
+		],
 		"scripts": [
 			"Control/script-repository-script1",
 			"PixelOverlay/script-repository-script2"
