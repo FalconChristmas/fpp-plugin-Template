@@ -24,9 +24,8 @@ behaves like a good guest:
   your one log file and anything you declared as a dependency).
 - **Declare dependencies, don't smuggle them.** Put apt packages, scripts, and
   other required plugins in the `dependencies` block of `pluginInfo.json`. Anything
-  installed ad-hoc from `fpp_install.sh` must go through `apt-get`, `npm`, or `uv` —
-  never `curl … | bash` or `pip --break-system-packages`. No `sudo` (your
-  install already runs as root).
+  installed ad-hoc from `fpp_install.sh` must go through `apt-get`, `npm`, or `pip` —
+  never `curl … | bash`. No `sudo` (your install already runs as root).
 - **Talk to FPP through its interfaces.** Prefer FPP's PHP helpers and the HTTP
   API over editing FPP's config files or restarting `fppd` by hand.
 - **Make the UI work everywhere.** It must read correctly in **both light and dark
@@ -252,13 +251,18 @@ locations.
 6.1 Declare apt packages, Python (PyPI) packages, script-repository scripts, and
 other required plugins in the top-level `dependencies` block of `pluginInfo.json`
 (see `PLUGININFO_FORMAT.md`). FPP installs them before your `fpp_install.sh` runs —
-Python packages via `uv pip install --system` (`dependencies.python`), straight
-into FPP's system Python, which your scripts can then use directly via the plain
-`python3` on PATH — no per-plugin venv, no `"$SCRIPT_DIR/.venv/..."` indirection.
-Prefer this over installing Python packages yourself in `fpp_install.sh`. A
-specific `versions[]` entry may also carry its own `dependencies`, additional to
-the top-level ones, for something that differs between FPP majors (e.g. a
-renamed apt package) — see `PLUGININFO_FORMAT.md`.
+Python packages via `pip install --break-system-packages` (`dependencies.python`),
+straight into FPP's system Python, which your scripts can then use directly via the
+plain `python3` on PATH — no per-plugin venv, no `"$SCRIPT_DIR/.venv/..."`
+indirection. `--break-system-packages` is required on any current PEP 668-managed
+image (Debian/RPi OS Bookworm+ refuses `pip install` outright without it) and is
+safe here: it installs into `/usr/local/lib/python3.x/dist-packages`, which is
+**not** tracked by `dpkg` — apt-installed `python3-*` packages live in
+`/usr/lib/python3/dist-packages` instead, a different directory — so it doesn't
+touch anything apt manages. Prefer this over installing Python packages yourself
+in `fpp_install.sh`. A specific `versions[]` entry may also carry its own
+`dependencies`, additional to the top-level ones, for something that differs
+between FPP majors (e.g. a renamed apt package) — see `PLUGININFO_FORMAT.md`.
 
 > **Python dependencies are installed system-wide, not per-plugin.** Unlike
 > `packages` (apt), they are not reference-counted or isolated: two plugins
@@ -268,6 +272,14 @@ renamed apt package) — see `PLUGININFO_FORMAT.md`.
 > (`requests`, not `requests==2.31.0`) unless you specifically need an exact
 > version, to minimize collisions with other plugins.
 
+> **There is no built-in mechanism for pinning a specific Python version.**
+> `dependencies.python` always installs into FPP's system-default `python3` —
+> if a package you need has no wheel for that version (e.g. a newer Debian
+> image bumped its default Python before a PyPI package caught up), you're
+> on your own: compile it from source in `fpp_install.sh`, or wait for
+> upstream to publish a matching wheel. There's no sanctioned "install a
+> different Python version" escape hatch.
+
 > **`dependencies` is FPP 10+ only, today.** FPP 9 and earlier silently ignore
 > the whole block. If you still support FPP 9/8/older, keep installing those
 > same things from `scripts/fpp_install.sh` too — `dependencies` is additive
@@ -276,11 +288,24 @@ renamed apt package) — see `PLUGININFO_FORMAT.md`.
 > installs gets encouraged.
 
 6.2 **If you need to install something ad-hoc from `fpp_install.sh`** (beyond
-what's declared in `dependencies`), use only `apt-get`, `npm`, or `uv` — no
-`curl|bash` bootstrappers, and **never** `pip install --break-system-packages`,
-which corrupts the system Python. For Python, use `uv pip install --system`
-(PEP 668-safe) instead of bare `pip` — but prefer declaring it in
-`dependencies.python` (§6.1) over doing this ad hoc at all.
+what's declared in `dependencies`), use only `apt-get`, `npm`, or `pip` — no
+`curl|bash` bootstrappers. For Python, use `pip install --break-system-packages`
+(see §6.1 for why this is safe, not a corruption risk) — but prefer declaring it
+in `dependencies.python` (§6.1) over doing this ad hoc at all.
+
+> **Don't install another package manager to get your dependency in.** `apt-get`,
+> `npm`, and `pip` already ship with FPP — reaching for a different one (pipx,
+> poetry, conda, nvm, cargo, ...) because it's more convenient for your specific
+> package adds a whole extra layer FPP doesn't control: its own bootstrap step
+> (which can fail independently of everything else), its own config/behavior
+> that can silently drift from what the rest of FPP assumes, and one more thing
+> every plugin author and FPP maintainer needs to know to debug an install. FPP
+> itself used to install `uv` this way specifically to avoid `pip
+> --break-system-packages` — that reasoning turned out to be based on an
+> untested assumption about `uv`'s behavior (see git history), and the extra
+> tool was later removed. If `apt-get`/`npm`/`pip` genuinely can't get you what
+> you need, that's a sign to build from source or vendor the dependency, not to
+> add a fourth installer.
 
 6.3 Anything else your install genuinely needs belongs in `fpp_install.sh`, and
 stays inside your plugin directory.
@@ -348,13 +373,13 @@ not an example to copy.
 - [ ] Native (C++) build happens in `fpp_install.sh`, not in `preStart.sh`/
       `postStart.sh` — install/upgrade/FPP-core-upgrade already cover it.
 - [ ] No `sudo`, no `reboot`/`shutdown`, no direct `fppd` restart, no
-      `curl … | bash`, no `pip --break-system-packages`.
+      `curl … | bash`.
 - [ ] Talks to FPP via helpers/HTTP API; no hand-editing of core FPP config.
 - [ ] Own config in `config/plugin.<repoName>`, data in `plugindata/`; all writes
       confined to the plugin directory and declared paths.
 - [ ] apt packages / scripts / plugin deps declared in `pluginInfo.json`
       `dependencies` where possible; any ad-hoc install in `fpp_install.sh` uses
-      only `apt-get`/`npm`/`uv` (no `curl|bash`).
+      only `apt-get`/`npm`/`pip` (no `curl|bash`).
 - [ ] UI verified in light **and** dark, and on a phone-width screen; no hardcoded
       colors, no fixed-pixel layout.
 - [ ] Heavy plugins declare resource hints as top-level `pluginInfo.json` fields.

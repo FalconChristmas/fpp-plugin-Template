@@ -53,7 +53,7 @@ which points at this file.
 | `linkName` | string | optional (legacy) | Creates a symlink in the plugin directory (`<linkName>` → the plugin) on install, removed on uninstall. Used by older plugins whose code expects a directory name different from `repoName`. **Only takes effect when the cloned repo does *not* ship its own `pluginInfo.json`** (i.e. info hosted externally) — for a modern plugin that ships this file, `linkName` does nothing. New plugins normally don't need it. |
 | `delist` | boolean | optional | Set `true` to request removal from FPP's Plugin Manager list (retire the plugin). Existing installs are unaffected. Because only someone with write access to your repo can set it, it also proves ownership for a de-list request. |
 | `versions` | array | **yes** | One or more compatibility entries. See below. |
-| `dependencies` | object | optional | Other things this plugin needs, installed automatically **before** the plugin's own `scripts/fpp_install.sh` runs: `packages` (apt), `python` (PyPI, via `uv`), `scripts` (script repository), and `plugins` (other FPP plugins, installed transitively). Applies to every entry in `versions[]`; a specific entry may declare its own `dependencies` too, additive to this one. See below. |
+| `dependencies` | object | optional | Other things this plugin needs, installed automatically **before** the plugin's own `scripts/fpp_install.sh` runs: `packages` (apt), `python` (PyPI, via `pip`), `scripts` (script repository), and `plugins` (other FPP plugins, installed transitively). Applies to every entry in `versions[]`; a specific entry may declare its own `dependencies` too, additive to this one. See below. |
 
 ---
 
@@ -266,7 +266,7 @@ They are resolved in this order — **packages → python → scripts → plugin
 | Key | Meaning |
 |-----|---------|
 | `packages` | System (apt) packages. FPP runs `apt-get update` then installs each one, and records that **this plugin** requested it. |
-| `python` | Python (PyPI) packages, installed with `uv pip install --system` straight into FPP's **system** Python (not isolated per plugin, not reference-counted — a package shared by two plugins is just one shared install). Your scripts run against it via the plain `python3` on PATH (see `PLUGIN_GUIDELINES.md` §6.1). `uv` ships by default with FPP. |
+| `python` | Python (PyPI) packages, installed with `pip install --break-system-packages` straight into FPP's **system** Python (not isolated per plugin, not reference-counted — a package shared by two plugins is just one shared install). Your scripts run against it via the plain `python3` on PATH (see `PLUGIN_GUIDELINES.md` §6.1). `pip` ships by default with FPP. |
 | `scripts` | Script-repository entries in `"Category/file"` form (the same layout as the **Content Setup → Script Repository** page, backed by `FalconChristmas/fpp-scripts`). Each is downloaded into your scripts directory; note repository scripts may run their own `# InstallAction:` steps on install. |
 | `plugins` | Other FPP plugins, by `repoName`. Each is cloned and installed the same way (its own dependencies resolved too), then its `fpp_install.sh` runs. The name **must exist in [`fpp-data/pluginList.json`](https://github.com/FalconChristmas/fpp-data/blob/master/pluginList.json)** — arbitrary URLs are not accepted here. Dependency chains are cycle-guarded, and an already-installed dependency is left as-is. |
 
@@ -276,10 +276,10 @@ They are resolved in this order — **packages → python → scripts → plugin
 > leave it half-installed — so if your plugin genuinely needs packages, also
 > restrict it to the supported hardware with `platforms[]`.
 
-> **`python` needs `uv` on `PATH`, which ships by default with FPP.** On the rare
-> non-standard install where it's missing, FPP refuses to install a plugin that
-> declares Python package dependencies, the same way it refuses on a platform
-> without apt for `packages`.
+> **`python` needs `pip` on `PATH`, which ships by default with FPP.** On the
+> rare non-standard install where it's missing, FPP refuses to install a plugin
+> that declares Python package dependencies, the same way it refuses on a
+> platform without apt for `packages`.
 
 ### Package ownership and removal
 
