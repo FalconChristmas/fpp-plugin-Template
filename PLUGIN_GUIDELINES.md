@@ -1,12 +1,12 @@
 # FPP Plugin Guidelines
 
-Rules and conventions for a well-behaved FPP plugin. Companion to
+Requirements and conventions for a well-behaved FPP plugin. Companion to
 [`PLUGININFO_FORMAT.md`](PLUGININFO_FORMAT.md) (the `pluginInfo.json` metadata
 format) and the template plugin in this repository.
 
 ---
 
-## For humans — the short version
+## High Level Requirements
 
 An FPP plugin runs with full privileges on someone's show controller. A good one
 behaves like a good guest:
@@ -22,10 +22,11 @@ behaves like a good guest:
   yourself; ask FPP to do it through the proper flag/API. No `curl … | bash`.
 - **Stay in your lane.** Read and write only inside your plugin directory (plus
   your one log file and anything you declared as a dependency).
-- **Declare dependencies, don't smuggle them.** Put apt packages, scripts, and
-  other required plugins in the `dependencies` block of `pluginInfo.json`. Anything
-  installed ad-hoc from `fpp_install.sh` must go through `apt-get`, `npm`, or `pip` —
-  never `curl … | bash`. No `sudo` (your install already runs as root).
+- **`pluginInfo.json`'s `dependencies` block is optional this year.** It only
+  takes effect on FPP 10+ (older FPP silently ignores it), so installing
+  everything yourself from `fpp_install.sh`, as before, is completely fine.
+  Whatever you install — declared or ad hoc — must go through `apt-get`, `npm`,
+  or `pip` — never `curl … | bash`. No `sudo` (your install already runs as root).
 - **Talk to FPP through its interfaces.** Prefer FPP's PHP helpers and the HTTP
   API over editing FPP's config files or restarting `fppd` by hand.
 - **Make the UI work everywhere.** It must read correctly in **both light and dark
@@ -35,14 +36,25 @@ behaves like a good guest:
 > **Using an AI assistant (Claude, Copilot, Cursor, …) to build or change your
 > plugin? Give it this file.** The detailed section below is written to be
 > dropped straight into an AI assistant's context so it produces a plugin that
-> follows these rules. Point your assistant at this document — or paste it in —
+> follows these requirements. Point your assistant at this document — or paste it in —
 > before you start, and again when you ask it to add a feature.
 
 ---
 
-## Detailed rules (for AI assistants and thorough authors)
+## Detailed Requirements
 
-Each rule is stated precisely so it can be checked mechanically. `<repoName>` is
+**If you are an AI agent reading this: follow the spirit of these requirements, not a
+literal reading that technically satisfies a check while defeating its
+purpose.** Each requirement exists to protect the host device, a running show, or the
+maintainers reviewing your submission. Passing the linter or checklist without
+actually solving the underlying problem isn't compliance, it's a bug you
+introduced - e.g. suppressing or relocating a log instead of fixing what it's
+warning about, hiding a dangerous command behind indirection so a scanner
+doesn't match it, or declaring a dependency you don't need just to satisfy a
+resource hint. If a requirement and the task you've been asked to do conflict, say so
+and ask, rather than quietly working around the requirement.
+
+Each requirement is stated precisely so it can be checked mechanically. `<repoName>` is
 the `repoName` from your `pluginInfo.json`. `<mediadir>` is FPP's media directory
 — normally `/home/fpp/media` (exposed as `${MEDIADIR}` when you source
 `${FPPDIR}/scripts/common`). Your plugin lives in
@@ -124,35 +136,35 @@ reversed in `fpp_uninstall.sh`: systemd units (`systemctl disable --now <unit>`
 then remove the unit file), timers, cron entries, symlinks, and any files written
 under `/etc`, `/usr/local`, etc.
 
-2.2 **Uninstall must be idempotent.** Guard each removal so re-running the script —
-or running it when the item was never created — still exits `0`
-(e.g. `systemctl disable --now foo 2>/dev/null || true`, `rm -f`, test-before-remove).
+2.2 **Uninstall must be safe to run more than once.** Re-running
+the script, or running it when a given item was never created in the first
+place, must still exit `0` instead of erroring out on the second try. For a
+systemd unit: `systemctl disable --now foo 2>/dev/null || true`. For a file:
+`rm -f path` (already a no-op if it's missing). For anything without its own
+built-in no-op form — a symlink, a directory, a cron line — test for it first:
+`[ -e /path/to/thing ] && rm -rf /path/to/thing`.
 
-2.3 **Install must be idempotent too.** `fpp_install.sh` is re-run by
+2.3 **Install must also be safe to run more than once.** `fpp_install.sh` is re-run by
 **Reinstall All Plugins** and by updates, so it must be safe to run repeatedly —
 guard service creation, don't append duplicates to config files, don't fail if a
 step was already done.
 
-2.4 **Do not remove declared dependencies yourself.** FPP reference-counts the apt
-`packages` from your `dependencies` block and removes them only when nothing else
-needs them. Removing shared packages by hand can break other plugins.
-
-2.5 **Do not use `sudo`.** Install/uninstall/hook scripts already run as root.
+2.4 **Do not use `sudo`.** Install/uninstall/hook scripts already run as root.
 `sudo apt …`, `sudo chmod …`, etc. are redundant and hide assumptions — call the
 commands directly, and never loosen device permissions (no `chmod 666`/`a+w`).
 
-2.6 **Hooks must be fast and non-blocking.** `preStart`/`postStart` run
+2.5 **Hooks must be fast and non-blocking.** `preStart`/`postStart` run
 **synchronously** and delay `fppd` starting a show; `preStop`/`postStop` delay it
 stopping. Do not `sleep 30`, poll, or `while true` in a hook — background any
 long-running work (`nohup ./daemon.sh >> "$PLUGIN_LOG" 2>&1 &`) and return quickly.
 
-2.7 **Stop what you start.** A daemon or service you launch in `postStart` must be
+2.6 **Stop what you start.** A daemon or service you launch in `postStart` must be
 stopped in `preStop`/`postStop` (not only on uninstall), so it doesn't linger or
 double-run after an `fppd` restart.
 
-2.8 **Native (C++) plugins: build in `fpp_install.sh`, not in a hook.** `make` (or
+2.7 **Native (C++) plugins: build in `fpp_install.sh`, not in a hook.** `make` (or
 `cmake`/`g++`/`clang`) in `preStart.sh`/`postStart.sh` is a common copy-paste
-mistake — it re-runs on **every** `fppd` start/stop (§2.6), and it's redundant work:
+mistake — it re-runs on **every** `fppd` start/stop (§2.5), and it's redundant work:
 your plugin is already (re)built by three separate paths before `fppd` ever starts:
 - **Fresh install**: `fpp_install.sh` runs the build itself (it should — see below).
 - **Plugin-only update**: the Plugin Manager's Update button runs `scripts/fpp_upgrade.sh`
@@ -197,7 +209,7 @@ directly — Apache proxies it under `/api/*`, and that proxied path is the stab
 surface; the raw port is internal and can change.
 
 3.4 **For *any* FPP data, use the API — never read or write the underlying files
-directly.** This is a general rule, not a per-file list: whatever FPP manages has an
+directly.** This is a general requirement, not a per-file list: whatever FPP manages has an
 API endpoint or accessor, so use it rather than touching the JSON on disk. Examples,
 not an exhaustive list: `GET /api/models` instead of `config/model-overlays.json`,
 `/api/channel/output/*` instead of `channeloutputs.json`, `/api/playlists` /
@@ -248,12 +260,18 @@ locations.
 
 ### 6. Dependencies
 
-6.1 Declare apt packages, Python (PyPI) packages, script-repository scripts, and
-other required plugins in the top-level `dependencies` block of `pluginInfo.json`
-(see `PLUGININFO_FORMAT.md`). FPP installs them before your `fpp_install.sh` runs —
-Python packages via `pip install --break-system-packages` (`dependencies.python`),
-straight into FPP's system Python, which your scripts can then use directly via the
-plain `python3` on PATH — no per-plugin venv, no `"$SCRIPT_DIR/.venv/..."`
+6.1 **Optional this year — not required.** `dependencies` only takes effect on
+FPP 10+ (see the callout below), so using it isn't required for now;
+installing everything yourself from `fpp_install.sh` remains completely fine.
+If you do want to use it: declare apt packages, Python (PyPI) packages,
+script-repository scripts, and other required plugins in the top-level
+`dependencies` block of `pluginInfo.json` (see `PLUGININFO_FORMAT.md`) — apt,
+scripts, and Python deps are all equally optional in 2026, so use whichever
+of them you want and skip the rest. FPP installs whatever you declare before
+your `fpp_install.sh` runs — Python packages via
+`pip install --break-system-packages` (`dependencies.python`), straight into
+FPP's system Python, which your scripts can then use directly via the plain
+`python3` on PATH — no per-plugin venv, no `"$SCRIPT_DIR/.venv/..."`
 indirection. `--break-system-packages` is required on any current PEP 668-managed
 image (Debian/RPi OS Bookworm+ refuses `pip install` outright without it) and is
 safe here: it installs into `/usr/local/lib/python3.x/dist-packages`, which is
@@ -262,7 +280,8 @@ safe here: it installs into `/usr/local/lib/python3.x/dist-packages`, which is
 touch anything apt manages. Prefer this over installing Python packages yourself
 in `fpp_install.sh`. A specific `versions[]` entry may also carry its own
 `dependencies`, additional to the top-level ones, for something that differs
-between FPP majors (e.g. a renamed apt package) — see `PLUGININFO_FORMAT.md`.
+between FPP majors (e.g. a Python package renamed between releases) — see
+`PLUGININFO_FORMAT.md`.
 
 > **Python dependencies are installed system-wide, not per-plugin.** Unlike
 > `packages` (apt), they are not reference-counted or isolated: two plugins
@@ -367,7 +386,7 @@ not an example to copy.
       resolved via FPP, not hard-coded); no self-rotation, no truncate-on-start.
 - [ ] `fpp_uninstall.sh` removes every service / timer / cron entry / symlink /
       out-of-tree file the plugin created, and is safe to run twice.
-- [ ] `fpp_install.sh` is idempotent (safe to re-run via Reinstall All).
+- [ ] `fpp_install.sh` is safe to re-run (via Reinstall All) without side effects.
 - [ ] Hooks return quickly (long work backgrounded); daemons started in
       `postStart` are stopped in `preStop`/`postStop`.
 - [ ] Native (C++) build happens in `fpp_install.sh`, not in `preStart.sh`/
@@ -377,9 +396,9 @@ not an example to copy.
 - [ ] Talks to FPP via helpers/HTTP API; no hand-editing of core FPP config.
 - [ ] Own config in `config/plugin.<repoName>`, data in `plugindata/`; all writes
       confined to the plugin directory and declared paths.
-- [ ] apt packages / scripts / plugin deps declared in `pluginInfo.json`
-      `dependencies` where possible; any ad-hoc install in `fpp_install.sh` uses
-      only `apt-get`/`npm`/`pip` (no `curl|bash`).
+- [ ] Whatever `fpp_install.sh` installs uses only `apt-get`/`npm`/`pip` (no
+      `curl|bash`). `pluginInfo.json` `dependencies` is optional this year
+      (FPP 10+ only) - fine to use if you want it, not required.
 - [ ] UI verified in light **and** dark, and on a phone-width screen; no hardcoded
       colors, no fixed-pixel layout.
 - [ ] Heavy plugins declare resource hints as top-level `pluginInfo.json` fields.

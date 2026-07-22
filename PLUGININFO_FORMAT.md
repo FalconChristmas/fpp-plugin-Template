@@ -35,7 +35,7 @@ which points at this file.
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
-| `repoName` | string | **yes** | Unique identifier for the plugin. Used as the on-disk install directory name and passed to the installer, so keep it filesystem/shell safe (it is run through `escapeshellcmd`). Must match the name used for this plugin in `fpp-data/pluginList.json`. |
+| `repoName` | string | **yes** | Unique identifier for the plugin. Used as the on-disk install directory name and passed to the installer, so keep it filesystem/shell safe (it is run through `escapeshellcmd`). Must match both the name used for this plugin in `fpp-data/pluginList.json` and the actual GitHub repository name (the one in `srcURL`) — CI flags a mismatch as a best-practice finding, since FPP installs into `${PLUGINDIR}/${repoName}` regardless of what the repo is actually called, so a mismatch only surfaces later as confusion (support, docs, cross-referencing). |
 | `name` | string | **yes** | Human-readable title shown at the top of the plugin's card in the Plugin Manager. |
 | `author` | string | **yes** | Author name / handle, shown in the **Author** field. |
 | `description` | string | **yes** | Short description shown in the **Description** field. Keep it to a line or two. |
