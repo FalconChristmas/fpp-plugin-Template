@@ -4,6 +4,11 @@ Requirements and conventions for a well-behaved FPP plugin. Companion to
 [`PLUGININFO_FORMAT.md`](PLUGININFO_FORMAT.md) (the `pluginInfo.json` metadata
 format) and the template plugin in this repository.
 
+These guidelines are subject to change without notice - a plugin that passed
+the automated check at submission time can still be asked to update later if
+the guidelines (or the check) change. See `PLUGINS.md` in `fpp-data` for what
+that looks like in practice.
+
 ---
 
 ## High Level Requirements
@@ -378,6 +383,36 @@ them onto a single page rather than adding a menu entry per page — the templat
 default `menu.inc` (three separate `help` entries) is the anti-pattern to avoid,
 not an example to copy.
 
+### 10. No donations, payments, or subscriptions
+
+Plugins listed in the FPP plugin directory may not reference or link to
+donations, payments, subscriptions, or similar monetization (PayPal, Buy Me a
+Coffee, Ko-fi, Venmo, Cash App, Patreon, GitHub Sponsors, or anything
+equivalent) anywhere in the plugin - its UI, README, help pages, or
+`pluginInfo.json`. This is a flat prohibition, not a style preference.
+
+### 11. No telemetry / phone-home
+
+Plugins may not log plugin usage or statistics and send them off-box - no
+bundled analytics/telemetry SDK (Google Analytics, Mixpanel, Segment,
+Amplitude, PostHog, Sentry, Hotjar, or similar), no home-rolled "call home with
+usage stats" endpoint. The only exception is data transmission that's
+essential to the plugin's actual function (e.g. a weather plugin fetching
+weather data, a plugin calling its own cloud service to do the thing it
+exists to do) - not usage/analytics collection layered on top of that.
+
+If you have a genuine need to collect usage statistics, don't build your own
+reporting channel - talk to the FPP developers about extending FPP's existing
+opt-in `fpp-stats` system instead.
+
+### 12. No advertising
+
+Plugins may not advertise anything inside the FPP UI - not products, not
+vendors, not things for sale, and not even other plugins (yours or anyone
+else's). Your plugin's pages exist to run your plugin, not to promote
+anything else. This is separate from #10 (no donation/payment links): this
+rule covers ads/promotion generally, paid or not.
+
 ---
 
 ## Pre-submission checklist
@@ -403,3 +438,9 @@ not an example to copy.
       colors, no fixed-pixel layout.
 - [ ] Heavy plugins declare resource hints as top-level `pluginInfo.json` fields.
 - [ ] `menu.inc` has at most one entry per `type` (status/content/output/help).
+- [ ] No donation/payment/subscription references or links anywhere (UI,
+      README, help pages, `pluginInfo.json`).
+- [ ] No bundled analytics/telemetry SDK or home-rolled usage-stats phone-home
+      - talk to the FPP developers about `fpp-stats` if you need real usage data.
+- [ ] No advertising anywhere in the plugin's UI - no products, vendors, or
+      other plugins (including your own).
