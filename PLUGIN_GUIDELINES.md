@@ -548,6 +548,24 @@ else's). Your plugin's pages exist to run your plugin, not to promote
 anything else. This is separate from #10 (no donation/payment links): this
 rule covers ads/promotion generally, paid or not.
 
+### 13. Disclose third-party remote-access/tunneling services
+
+If your plugin sets up, installs, or depends on a third-party tunneling or
+remote-access service (Dataplicity, ngrok, Cloudflare Tunnel, Tailscale,
+ZeroTier, localtunnel, serveo, pagekite, or similar) to work around FPP not
+having a public HTTPS endpoint, that has to be clearly stated in
+`pluginInfo.json`'s `description` field - not just buried in a README or setup
+page. A user deciding whether to install your plugin needs to know upfront
+that doing so may expose their FPP box's control surface to the internet
+through a third party, before they've already installed it and started
+configuring credentials.
+
+This isn't a prohibition on using these services - they're often the only
+practical way to receive an inbound webhook on a home network - it's a
+transparency requirement. Say what the service is and why it's needed, e.g.
+"*Uses Dataplicity to expose a public HTTPS endpoint so \<Provider\> can send
+webhook events to your Pi.*"
+
 ---
 
 ## Pre-submission checklist
@@ -585,3 +603,6 @@ rule covers ads/promotion generally, paid or not.
       - talk to the FPP developers about `fpp-stats` if you need real usage data.
 - [ ] No advertising anywhere in the plugin's UI - no products, vendors, or
       other plugins (including your own).
+- [ ] If the plugin sets up/depends on a tunneling or remote-access service
+      (Dataplicity, ngrok, Cloudflare Tunnel, Tailscale, ZeroTier, etc.), that's
+      stated up front in `pluginInfo.json`'s `description` field.
