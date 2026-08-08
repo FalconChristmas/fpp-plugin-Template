@@ -185,6 +185,122 @@ can't wait for install/upgrade (e.g. recovering from a binary built for a differ
 CPU after an SD image clone), guard it behind a cheap check (compare a stored
 version/arch fingerprint) so the common case is a no-op, not a rebuild.
 
+2.8 **Install and uninstall already take effect live, for most plugins —
+you don't need to opt in, but you do need a callbacks script.** The Plugin
+Manager calls `POST /api/fppd/plugin/<name>/load` right after your install
+script and `.../unload` right before your uninstall script, for script
+plugins and native (C++) plugins alike. This re-registers (or withdraws) the
+commands from your `commands/descriptions.json`, re-runs your callbacks
+script's lifecycle hooks, and — for a native plugin — destroys and recreates
+your `Plugin` object, all without restarting `fppd`. It's best-effort: if the
+call fails (e.g. `fppd` isn't running), the install/uninstall itself still
+succeeds and the change just takes effect at the next restart instead, same
+as before this existed.
+
+**The one gate on this: `load` checks for a `callbacks`/`callbacks.{sh,pl,php,py}`
+file before doing anything else, and treats "none found" as a successful
+no-op — it never even reaches the code that reads `commands/descriptions.json`.**
+If your plugin registers commands but has no callbacks script at all (nothing
+hooking show start/stop), your commands are *not* live-registered on install;
+you still need `restartFlag` for that case. Any plugin that has a callbacks
+script — even a trivial one — doesn't need it just for its own commands or
+callbacks to activate; see §3.6.
+
+Native plugins get one more layer on top of this: whether the `.so` itself is
+actually unmapped (`dlclose()`d) from the process, versus staying mapped
+(a few hundred KB) until `fppd` next restarts anyway. That's what
+`FPP_PLUGIN_SUPPORTS_UNLOAD()` controls, and it's real memory hygiene for
+frequent install/upgrade/uninstall cycles — but it is **not** what makes your
+plugin's behavior update live; that already happens for every plugin per the
+paragraph above.
+
+2.9 **Native (C++) plugins: build so you can be unloaded, not just loaded.**
+Opting in to `FPP_PLUGIN_SUPPORTS_UNLOAD()` (§2.8) so your `.so` mapping is
+actually released needs a few things done deliberately, not by default:
+
+- **Register HTTP routes through FPP, not straight on Drogon.** Call
+  `FPPPlugins::registerPluginApi()`/`unregisterPluginApi()` for every route —
+  never `drogon::app().registerHandler()` directly. Drogon has no route-removal
+  API, so a handler wired in directly stays in the router for the process
+  lifetime; that alone makes a plugin impossible to unload or hot-swap for a
+  rebuilt version.
+- **Withdraw your own commands.** A `Command` you register with
+  `CommandManager::addCommand()` is yours: in `shutdown()`, call
+  `removeCommand()` for each one and delete it — `removeCommand()` only
+  unregisters, it doesn't free anything. fppd keeps a backstop that deletes
+  anything you leave behind at unload (and logs a warning naming your plugin),
+  but that's a net, not a substitute — a command left running after unload
+  reads through a dangling pointer into your (possibly unmapped) plugin.
+- **Implement `shutdown()`, not just a destructor.** `FPPPlugins::Plugin::shutdown()`
+  is the teardown point, called once your routes are disarmed and before your
+  plugin is destroyed — a destructor runs too late for anything that could
+  still be entered concurrently. Return a readiness predicate
+  (`std::function<bool()>`) rather than blocking: fppd polls it (about once a
+  second, capped at 60s) before proceeding, so asynchronous teardown (a media
+  pipeline unwinding, a queued Drogon callback) has a real way to say "not yet"
+  instead of racing destruction.
+- **Tag your outbound `CurlManager` requests with your plugin name.** Every
+  `add*` call takes a trailing owner argument; passing your name lets fppd
+  cancel your in-flight requests as a group on unload, without running their
+  callbacks.
+- **Opt in explicitly with `FPP_PLUGIN_SUPPORTS_UNLOAD()`** (in your `Plugin`
+  subclass) once the above is actually true — it's what lets fppd `dlclose()`
+  your `.so` instead of just detaching the object and leaving the mapping
+  until fppd itself restarts.
+- **Build through FPP's shared `makefiles/common/setup.mk`**
+  (`include $(SRCDIR)/makefiles/common/setup.mk` in your `Makefile`, same as
+  every plugin in the catalog) rather than a hand-rolled build — that's what
+  applies `-fno-gnu-unique` on your behalf. Without it, a single
+  `static const std::string` inside *any* method defined in a class body
+  (which is every inline method) can make glibc mark your whole `.so`
+  NODELETE: `dlclose()` then reports success and unmaps nothing, silently, for
+  the life of the process — `FPP_PLUGIN_SUPPORTS_UNLOAD()` ends up meaning
+  less than it says. Verify after a build with
+  `nm -D lib<repoName>.so | awk '$2=="u"'` — any output means this plugin has
+  the problem.
+- **Expect refusal if you produce a channel output.** A plugin defining
+  `createChannelOutput()` is always refused a runtime unload while that output
+  is in use, regardless of how well it does everything else above — the
+  output object is owned by the output system and may be mid-show.
+
+None of this is required to *load* — a plugin that skips it still installs,
+uninstalls, and updates live per §2.8, just without its `.so` mapping actually
+being released between cycles.
+
+2.10 **Document HTTP routes with `apiDocs.json`.** A plugin that registers
+routes via `registerPluginApi()` (see 2.9) can **optionally** ship an
+`apiDocs.json` at the **root of the repo** (alongside `pluginInfo.json`, not
+inside `versions[]`) to document those routes on FPP's `/api` reference page.
+Without it, the routes still work — they just show up as "Undocumented - see
+plugin documentation" there, since Drogon's route table records a path but not
+which plugin registered it or what it does.
+
+The file is an OpenAPI fragment: a bare `"paths"` object, keyed by the path
+you passed to `registerPluginApi()`. FPP merges it into the generated spec
+verbatim, so any standard OpenAPI operation shape (`summary`, `parameters`,
+`requestBody`, `responses`, …) is fair game:
+
+```json
+{
+    "paths": {
+        "/api/plugin/<repoName>/status": {
+            "get": {
+                "summary": "Current plugin status",
+                "responses": { "200": { "description": "OK" } }
+            }
+        }
+    }
+}
+```
+
+A subpath of a `family=true` registration can be documented too, even though
+only the parent path is actually registered with Drogon (so FPP itself never
+sees the subpaths to report them as undocumented in the first place).
+
+Two safety notes: a plugin can't claim a path FPP core already documents (its
+entry is silently ignored, not overwritten), and a malformed `apiDocs.json`
+is logged and skipped rather than breaking the API page for anyone else.
+
 ### 3. Talk to FPP through its interfaces, not its internals
 
 Use FPP's stable, documented surfaces; don't reach into its files or process
@@ -229,10 +345,19 @@ change at any release, may not take effect until a restart, and can corrupt stat
 `WriteSettingToFile(key, value, "<repoName>")` (→ `config/plugin.<repoName>`) — and
 your own data under `<mediadir>/plugindata/`. That is using FPP's plugin mechanism.
 
-3.6 **To apply a restart/reboot, set the flag** — never restart `fppd`, reboot the
-box, or call a direct-restart path (`RestartFPPD()`, `/api/system/fppd/restart`,
-`systemctl restart fppd`, `fpp -r`). Set the flag with your language's native helper
-so FPP sequences it safely around a running show:
+3.6 **Most plugins never need to touch `restartFlag` — but check the gate in
+§2.8 before assuming you're one of them.** Install and uninstall reload your
+commands and callbacks live *if you have a callbacks script*; that used to
+always require a restart and, for that case, no longer does. If your plugin
+ships commands with no callbacks script at all, still set the flag — the
+live-reload path skips you entirely. Also reach for the flag when your plugin
+genuinely needs a full `fppd` restart for something outside the install/
+uninstall live-reload path (e.g. a change that only takes effect during
+fppd's own startup sequence). When you do need it, set the flag — never
+restart `fppd`, reboot the box, or call a direct-restart path (`RestartFPPD()`,
+`/api/system/fppd/restart`, `systemctl restart fppd`, `fpp -r`). Set the flag
+with your language's native helper so FPP sequences it safely around a
+running show:
 
 | Context | Set the restart flag |
 |---|---|
@@ -243,6 +368,16 @@ so FPP sequences it safely around a running show:
 | External process (Python…) | `PUT /api/settings/restartFlag` body `1` |
 
 Use `rebootFlag` / `SetRebootFlag(1)` for a reboot.
+
+3.7 **ArtNet: use the opcode handler API, never register the socket yourself.**
+ArtNet fixes the port it listens on, so FPP's own e131bridge and any plugin
+adding ArtNet trigger/timecode support necessarily share one socket. That
+descriptor's epoll registration belongs solely to `e131bridge.cpp` — call
+`AddArtNetOpcodeHandler()`/`RemoveArtNetOpcodeHandler()` for your opcode(s)
+instead of registering the fd with `EPollManager` yourself. `EPollManager`
+holds a single callback per descriptor, so a second direct registration
+silently replaces the first, and removing yours takes ArtNet reception away
+from *everyone* until something re-registers it.
 
 ### 4. Don't destabilize the host
 
@@ -426,6 +561,12 @@ rule covers ads/promotion generally, paid or not.
       `postStart` are stopped in `preStop`/`postStop`.
 - [ ] Native (C++) build happens in `fpp_install.sh`, not in `preStart.sh`/
       `postStart.sh` — install/upgrade/FPP-core-upgrade already cover it.
+- [ ] Native (C++) plugins: HTTP routes go through `registerPluginApi()`/
+      `unregisterPluginApi()` (never `drogon::app().registerHandler()`
+      directly); `Makefile` includes `makefiles/common/setup.mk`; if claiming
+      `FPP_PLUGIN_SUPPORTS_UNLOAD()`, `shutdown()` withdraws+deletes every
+      `addCommand()`-registered command and `nm -D lib<repoName>.so | awk
+      '$2=="u"'` comes back empty.
 - [ ] No `sudo`, no `reboot`/`shutdown`, no direct `fppd` restart, no
       `curl … | bash`.
 - [ ] Talks to FPP via helpers/HTTP API; no hand-editing of core FPP config.

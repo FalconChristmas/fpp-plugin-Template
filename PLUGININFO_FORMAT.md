@@ -221,7 +221,7 @@ install script can rely on them being present.
 >
 > We expect to encourage plugins to migrate fully onto `dependencies` (and
 > retire the manual installs in `fpp_install.sh`) once **FPP 11 or FPP 12**
-> ships and FPP 9/8 support is no longer a concern for most plugins. There's no
+> ships and FPP 8/9 support is no longer a concern for most plugins. There's no
 > need to make that jump today if you still support older releases — declaring
 > `dependencies` now is additive (it helps FPP 10+ users, e.g. with reference
 > counting on uninstall) and doesn't require dropping your existing
@@ -275,11 +275,6 @@ They are resolved in this order — **packages → python → scripts → plugin
 > **refuses to install a plugin that declares required packages** rather than
 > leave it half-installed — so if your plugin genuinely needs packages, also
 > restrict it to the supported hardware with `platforms[]`.
-
-> **`python` needs `pip` on `PATH`, which ships by default with FPP.** On the
-> rare non-standard install where it's missing, FPP refuses to install a plugin
-> that declares Python package dependencies, the same way it refuses on a
-> platform without apt for `packages`.
 
 ### Package ownership and removal
 
