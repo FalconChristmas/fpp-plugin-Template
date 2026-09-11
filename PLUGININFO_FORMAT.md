@@ -42,7 +42,7 @@ which points at this file.
 | `homeURL` | string | **yes** | Project home page. Rendered as the **home** link in the plugin card footer. Must start `http://` or `https://`. |
 | `srcURL` | string | **yes** | Git clone URL (normally ending in `.git`). FPP clones this to install the plugin, and links to it as **View Source**. Must be a `github.com` repo — that's the only source FPP plugins support, and it's the trust anchor for the Official badge. |
 | `bugURL` | string | **yes** | Issue tracker URL. Rendered as the **Report a Bug** link. Must start `http://` or `https://`. |
-| `iconURL` | string | optional | Icon URL. Icon should be on root repo (to render when installed on offline devices) named icon.png 128x128 or 256x256 |
+| `iconURL` | string | optional | Icon URL, used only when the repo has no `icon.png` (128x128 or 256x256) in its root — ship that so the icon renders offline. Must be an `https://raw.githubusercontent.com/...` URL ending in `.png`, `.jpg`, `.jpeg`, `.gif` or `.webp`; anything else is ignored. |
 | `documentation` | string | optional | URL to human documentation for this plugin. Purely informational — not read or rendered by FPP itself. |
 | `allowUpdates` | integer (`0`/`1`) | optional | Controls whether FPP offers in-place git updates for the installed plugin. When omitted it is treated as allowed. Set to `0` to hide the **Update Now** / **Check for Updates** buttons (install-once plugins). Can also be set per-version inside `versions[]` (the per-version value takes effect for that version). |
 | `minMemoryMB` | integer | optional | Minimum system RAM (MB) the plugin needs to run acceptably, across all versions. If the device has less, FPP flags it (and hides it on the Basic UI level). See **Resource hints** below. |
@@ -51,7 +51,7 @@ which points at this file.
 | `version` | — | **do not use** | Legacy. FPP does not read a top-level `version` — use `versions[]` entries for compatibility. Explicitly allowed by the schema only so a plugin carrying it from an older template doesn't fail validation. |
 | `requires` | array | **do not use** | Legacy. FPP does not read a top-level `requires` — declare needs in the `dependencies` block. Explicitly allowed by the schema only so a plugin carrying it from an older template doesn't fail validation. |
 | `linkName` | string | optional (legacy) | Creates a symlink in the plugin directory (`<linkName>` → the plugin) on install, removed on uninstall. Used by older plugins whose code expects a directory name different from `repoName`. **Only takes effect when the cloned repo does *not* ship its own `pluginInfo.json`** (i.e. info hosted externally) — for a modern plugin that ships this file, `linkName` does nothing. New plugins normally don't need it. |
-| `delist` | boolean | optional | Set `true` to request removal from FPP's Plugin Manager list (retire the plugin). Existing installs are unaffected. Because only someone with write access to your repo can set it, it also proves ownership for a de-list request. |
+| `delist` | boolean | optional | Set `true` to request removal from FPP's Plugin Manager list (retire the plugin). Existing installs are unaffected. Because only someone with write access to your repo can set it, it also proves ownership for a de-list request. Note this is a `fpp-data` / CI convention only — FPP itself never reads `delist`; the plugin disappears when its `pluginList.json` entry is removed. |
 | `versions` | array | **yes** | One or more compatibility entries. See below. |
 | `dependencies` | object | optional | Other things this plugin needs, installed automatically **before** the plugin's own `scripts/fpp_install.sh` runs: `packages` (apt), `python` (PyPI, via `pip`), `scripts` (script repository), and `plugins` (other FPP plugins, installed transitively). Applies to every entry in `versions[]`; a specific entry may declare its own `dependencies` too, additive to this one. See below. |
 
@@ -61,16 +61,19 @@ which points at this file.
 
 `versions` is a list of entries, each describing how to install the plugin for a
 particular range of FPP releases (and, optionally, particular hardware). When
-you open the Plugin Manager, FPP walks the list and picks the **first entry
-whose FPP-version range and platform match** the machine you're on. That entry's
-`branch`/`sha` is what gets installed.
+you open the Plugin Manager, FPP walks the whole list and picks the **last entry
+whose FPP-version range and platform match** the machine you're on (the JS and
+PHP selectors both overwrite the match on every hit, so a later entry wins over
+an earlier one when two windows overlap). That entry's `branch`/`sha` is what
+gets installed. List entries oldest-first so the newest window is the one that
+wins.
 
 ### Version-entry fields
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
 | `minFPPVersion` | string | **yes** | Minimum FPP version this entry supports, e.g. `"9.0"`. Compared against the running FPP version. |
-| `maxFPPVersion` | string | **yes** | Maximum FPP version this entry supports. The special values `"0"`, `"0.0"`, or `""` mean **open-ended** — FPP treats the entry as valid through the rest of the current major version series (internally, up to that major's `.999`). Use an open-ended max on your newest entry so it keeps working on the current release. |
+| `maxFPPVersion` | string | **yes** | Maximum FPP version this entry supports. The special values `"0"`, `"0.0"`, or `""` mean **open-ended**, but only within the major named by `minFPPVersion`: if that major matches the running FPP major the entry is unbounded, otherwise FPP caps it at the previous major's `.999` and treats the plugin as **untested** on this release (see below). Use an open-ended max on your newest entry, and bump that entry's `minFPPVersion` to each new FPP major once you've verified the plugin on it. |
 | `branch` | string | **yes** | Git branch FPP checks out when installing this entry. |
 | `sha` | string | **yes** | Specific commit to pin to. Use `""` (empty string) to always install the **latest** commit on `branch`. Pin a real SHA to freeze an entry to a known-good commit (typical for old FPP majors you no longer update). |
 | `allowUpdates` | integer (`0`/`1`) | optional | Per-version override of the top-level `allowUpdates`. Set `0` on a frozen/pinned entry so FPP won't try to pull newer commits into an old FPP release. |
@@ -79,30 +82,48 @@ whose FPP-version range and platform match** the machine you're on. That entry's
 
 ### `minFPPVersion` / `maxFPPVersion` semantics
 
-- Give each entry a version *window*. FPP picks the entry whose window contains
-  the running version.
+- Give each entry a version *window*. FPP picks the (last) entry whose window
+  contains the running version. Bounds are compared against the full running
+  version (`major.minor.patch`); the upper bound is inclusive in the Plugin
+  Manager UI.
 - The newest/current entry should use an open-ended max (`"0"`) so it stays
-  valid as new point releases ship.
-- If FPP finds **no** matching entry for the current version, the plugin is shown
-  as having compatible versions for other FPP releases, and (if you install it
-  anyway) is flagged **"Install untested plugin at your own risk."**
+  valid as new point releases ship **within that major**.
+- An open-ended entry is *not* carried forward across majors. On FPP 10, an
+  entry `{"minFPPVersion": "9.0", "maxFPPVersion": "0"}` is treated as
+  `9.0`–`9.999` and the plugin is flagged **untested**: the card carries a
+  *Not updated for FPP 10* badge and an **Install anyway** button (the detail
+  view spells out *"This plugin has not been updated to work with your version
+  of FPP"*), it is hidden from the Basic UI level, and it can only be reached
+  from Advanced/Developer. To clear the flag, bump
+  `minFPPVersion` on the open-ended entry to the current major (adding a pinned
+  entry for the old major if you still support it).
+- If **no** entry matches and none is open-ended (every `maxFPPVersion` is a
+  real version below the running one, or `platforms` excludes this board), the
+  plugin is **incompatible**: it appears only in the *Incompatible* section on
+  Advanced/Developer with *"No version is compatible with your FPP
+  version/platform"* and **no install button at all**.
 
 ### Worked multi-version example
 
-Modeled on how `fpp-arcade` does it — freeze old majors to a specific commit and
-disable updates for them, keep the current major open-ended:
+Recommended shape (`fpp-arcade` does something similar): every major you no
+longer develop for is **pinned** to the last commit known to work there, with
+updates off; only the current major tracks the branch tip. Note the last
+entry's `minFPPVersion` is the **current** major (`10.0`); an open-ended entry
+starting at `9.0` would show as *untested* on FPP 10. Never leave an old
+major on `"sha": ""` — those boxes would keep pulling commits made for the
+newer FPP:
 
 ```json
 "versions": [
     {
         "minFPPVersion": "7.0",
-        "maxFPPVersion": "8.99",
+        "maxFPPVersion": "9.99",
         "branch": "master",
         "sha": "4723c22f89200e25d683d73e310f96a922438814",
-        "allowUpdates": 1
+        "allowUpdates": 0
     },
     {
-        "minFPPVersion": "9.0",
+        "minFPPVersion": "10.0",
         "maxFPPVersion": "0",
         "branch": "master",
         "sha": "",
@@ -144,7 +165,7 @@ Example — a version that only installs on Raspberry Pi:
 
 ```json
 {
-    "minFPPVersion": "9.0",
+    "minFPPVersion": "10.0",
     "maxFPPVersion": "0",
     "branch": "master",
     "sha": "",
@@ -180,8 +201,9 @@ them on every entry.
 How FPP compares them against the device (total RAM + CPU cores, detected
 automatically):
 
-- **Advisory badge.** When a minimum isn't met, a muted `May exceed this device`
-  badge appears on the plugin card / detail view.
+- **Advisory badge.** When a minimum isn't met, a muted `Not Enough RAM/CPU`
+  badge appears on the plugin card / detail view, and the install button
+  changes to **Install anyway**.
 - **Basic UI level hides it.** If `minMemoryMB` or `minCpuCores` exceeds the
   device, the plugin is hidden on the Basic UI level (including from the Popular
   strip) so casual users never install something that would starve their board.
@@ -189,16 +211,19 @@ automatically):
   the badge, and installing it pops a confirmation noting the shortfall (the
   values are self-reported, and a power user may know their setup is fine).
 
-Example — a plugin that wants 1 GB RAM and 2 CPU cores to run:
+Example — a plugin that wants 1 GB RAM and 2 CPU cores to run (top level,
+alongside `allowUpdates`, **not** inside a `versions[]` entry — FPP ignores them
+there):
 
 ```json
 {
-    "minFPPVersion": "9.0",
-    "maxFPPVersion": "0",
-    "branch": "master",
-    "sha": "",
+    "repoName": "fpp-plugin-Example",
+    "allowUpdates": 1,
     "minMemoryMB": 1024,
-    "minCpuCores": 2
+    "minCpuCores": 2,
+    "versions": [
+        { "minFPPVersion": "10.0", "maxFPPVersion": "0", "branch": "master", "sha": "" }
+    ]
 }
 ```
 
@@ -245,7 +270,13 @@ duplicating the whole block per version:
 ]
 ```
 On FPP 10, the entry above resolves to `common-package` + `libfoo-dev` (not
-`libfoo1` — that's only added when the FPP 9 entry is the one selected). Note
+`libfoo1` — that's only added when the FPP 9 entry is the one selected). One
+caveat: the server-side selector used when a plugin is installed *as a
+dependency of another plugin* treats `maxFPPVersion` as **exclusive** (the UI
+treats it as inclusive), so an entry capped at exactly the running version
+(e.g. `"maxFPPVersion": "10.1"` on FPP 10.1.0) matches in the Plugin Manager
+but not during dependency resolution. Use `.99` caps and open-ended maxes to stay
+clear of the edge. Note
 this whole example is itself FPP-10-only per the callout above — the FPP 9
 entry's own `dependencies` are declared for documentation/forward-compatibility
 (so they're ready when you eventually drop pre-10 support) but won't actually
@@ -327,7 +358,7 @@ These are added by FPP at install time and must **not** be authored in your
     "allowUpdates": 1,
     "versions": [
         {
-            "minFPPVersion": "9.0",
+            "minFPPVersion": "10.0",
             "maxFPPVersion": "0",
             "branch": "master",
             "sha": ""
@@ -338,8 +369,10 @@ These are added by FPP at install time and must **not** be authored in your
 
 - `repoName` / `name` / `author` / `description` / `homeURL` / `srcURL` /
   `bugURL` / `versions` are the required fields.
-- The single version entry says: "install on FPP 9.0 and up (open-ended), from
-  the tip of `master`, and allow updates."
+- The single version entry says: "install on any FPP 10.x (open-ended within
+  the 10 series), from the tip of `master`, and allow updates." When FPP 11
+  ships this entry will show as *untested* there until `minFPPVersion` is
+  bumped to `11.0` (or a second entry is added).
 - Add `platforms` to a version entry to restrict hardware; add more entries to
   support older FPP majors with pinned commits.
 

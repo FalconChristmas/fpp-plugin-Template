@@ -49,7 +49,7 @@
         "iconURL": {
             "type": "string",
             "format": "uri",
-            "description": "Icon URL (PNG, 128x128 or 256x256). FPP prefers a local icon.png in the repo root and falls back to this."
+            "description": "Icon URL. FPP prefers a local icon.png (128x128 or 256x256) in the repo root and falls back to this, which must be an https://raw.githubusercontent.com/ URL ending in .png, .jpg, .jpeg, .gif or .webp; anything else is ignored."
         },
         "allowUpdates": {
             "type": "integer",
@@ -59,12 +59,12 @@
         "minMemoryMB": {
             "type": "integer",
             "minimum": 1,
-            "description": "Default minimum system RAM (MB) across all versions. Below this, FPP flags the plugin and hides it on the Basic UI level. Can be overridden per version."
+            "description": "Minimum system RAM (MB), plugin-wide (top level only; not read from versions[] entries). Below this, FPP flags the plugin and hides it on the Basic UI level."
         },
         "minCpuCores": {
             "type": "integer",
             "minimum": 1,
-            "description": "Default minimum recommended CPU cores across all versions. Below this, FPP flags the plugin and hides it on the Basic UI level. Can be overridden per version."
+            "description": "Minimum recommended CPU cores, plugin-wide (top level only; not read from versions[] entries). Below this, FPP flags the plugin and hides it on the Basic UI level."
         },
         "private": {
             "type": "boolean",
@@ -81,7 +81,7 @@
         "versions": {
             "type": "array",
             "minItems": 1,
-            "description": "Compatibility entries. FPP installs the first entry whose FPP-version range and platform match the device.",
+            "description": "Compatibility entries. FPP installs the LAST entry whose FPP-version range and platform match the device, so list them oldest-first.",
             "items": { "$ref": "#/$defs/versionEntry" }
         },
         "dependencies": {
@@ -130,7 +130,7 @@
                 },
                 "maxFPPVersion": {
                     "type": "string",
-                    "description": "Maximum FPP version. \"0\", \"0.0\" or \"\" mean open-ended (valid through the rest of the current major series).",
+                    "description": "Maximum FPP version. \"0\", \"0.0\" or \"\" mean open-ended, but only within the major named by minFPPVersion; on a newer major the entry is treated as untested.",
                     "pattern": "^([0-9]+(\\.[0-9]+)*)?$"
                 },
                 "branch": {
