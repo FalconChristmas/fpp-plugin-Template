@@ -4,7 +4,16 @@
     "title": "FPP pluginInfo.json",
     "description": "Metadata file every FPP plugin ships in its repository root. Prose reference: PLUGININFO_FORMAT.md in this repo. Strictly validated: every field below is the complete recognized set, including 'version'/'requires' (legacy, ignored by FPP at runtime but explicitly allowed here so a plugin that still carries them from an older template doesn't fail validation) -- anything else is rejected.",
     "type": "object",
-    "required": ["repoName", "name", "author", "description", "homeURL", "srcURL", "bugURL", "versions"],
+    "required": [
+        "repoName",
+        "name",
+        "author",
+        "description",
+        "homeURL",
+        "srcURL",
+        "bugURL",
+        "versions"
+    ],
     "additionalProperties": false,
     "properties": {
         "repoName": {
@@ -53,7 +62,10 @@
         },
         "allowUpdates": {
             "type": "integer",
-            "enum": [0, 1],
+            "enum": [
+                0,
+                1
+            ],
             "description": "0 hides in-place update buttons (install-once plugins). Omitted = allowed. Can be overridden per version."
         },
         "minMemoryMB": {
@@ -82,7 +94,9 @@
             "type": "array",
             "minItems": 1,
             "description": "Compatibility entries. FPP installs the LAST entry whose FPP-version range and platform match the device, so list them oldest-first.",
-            "items": { "$ref": "#/$defs/versionEntry" }
+            "items": {
+                "$ref": "#/$defs/versionEntry"
+            }
         },
         "dependencies": {
             "$ref": "#/$defs/dependencies",
@@ -99,6 +113,10 @@
         "requires": {
             "type": "array",
             "description": "IGNORED. FPP does not read a top-level 'requires' -- declare needs in the 'dependencies' block instead. Allowed here only so a plugin carrying it from an older template doesn't fail validation; don't add it to a new plugin."
+        },
+        "privacy": {
+            "$ref": "#/$defs/privacy",
+            "description": "Privacy disclosure (the `privacy` section of PLUGININFO_FORMAT.md; rules in PLUGIN_GUIDELINES.md §14). Optional in the schema but required for listing: a plugin without it cannot be listed or updated (lint_plugin.py's privacy-missing blocker). All eight keys are required and may be empty - an empty array is a statement (\"sends nothing\"), a missing key fails validation. Self-declared: the listing check greps the plugin's code against it (lint_plugin.py's privacy-undeclared-* rules) and fails on a contradiction. FPP computes the six install-dialog lights from it; the author never picks a colour. See PLUGIN_GUIDELINES.md §14."
         }
     },
     "$defs": {
@@ -119,7 +137,12 @@
         },
         "versionEntry": {
             "type": "object",
-            "required": ["minFPPVersion", "maxFPPVersion", "branch", "sha"],
+            "required": [
+                "minFPPVersion",
+                "maxFPPVersion",
+                "branch",
+                "sha"
+            ],
             "additionalProperties": false,
             "properties": {
                 "minFPPVersion": {
@@ -144,13 +167,18 @@
                 },
                 "allowUpdates": {
                     "type": "integer",
-                    "enum": [0, 1],
+                    "enum": [
+                        0,
+                        1
+                    ],
                     "description": "Per-version override of the top-level allowUpdates."
                 },
                 "platforms": {
                     "type": "array",
                     "description": "Restrict this entry to specific hardware. Omit to match all platforms.",
-                    "items": { "$ref": "#/$defs/platform" }
+                    "items": {
+                        "$ref": "#/$defs/platform"
+                    }
                 },
                 "dependencies": {
                     "$ref": "#/$defs/dependencies",
@@ -164,23 +192,235 @@
             "properties": {
                 "packages": {
                     "type": "array",
-                    "items": { "type": "string" },
+                    "items": {
+                        "type": "string"
+                    },
                     "description": "System (apt) packages. Reference-counted per requester. Needs a Debian-family platform."
                 },
                 "python": {
                     "type": "array",
-                    "items": { "type": "string" },
+                    "items": {
+                        "type": "string"
+                    },
                     "description": "Python (PyPI) packages, installed via `pip install --break-system-packages` into FPP's system Python (not isolated per plugin, not reference-counted). pip ships by default with FPP."
                 },
                 "scripts": {
                     "type": "array",
-                    "items": { "type": "string" },
+                    "items": {
+                        "type": "string"
+                    },
                     "description": "Script-repository entries in \"Category/file\" form."
                 },
                 "plugins": {
                     "type": "array",
-                    "items": { "type": "string" },
+                    "items": {
+                        "type": "string"
+                    },
                     "description": "Other FPP plugins by repoName. Each must exist in fpp-data/pluginList.json."
+                }
+            }
+        },
+        "privacy": {
+            "type": "object",
+            "description": "What the plugin sends, collects, senses, opens to the outside and changes on the host. Eight keys, all required. Written for a neighbour, not a developer: \"your phone number and message\", not \"MSISDN and body\". Any other key is rejected here and ignored by FPP.",
+            "required": [
+                "summary",
+                "sends",
+                "collects",
+                "sensors",
+                "remoteAccess",
+                "systemChanges",
+                "closedCode",
+                "other"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "One or two plain sentences for the install dialog: what leaves the device, to whom, and why. 1-200 characters; the listing check warns (never blocks) over 200."
+                },
+                "sends": {
+                    "type": "array",
+                    "description": "Every destination the plugin's traffic reaches off this device - directly, through FPP's helpers (CurlManager, urlGet, core MQTT, MultiSync), from the operator's browser (CDN, fonts, embeds) or from a visitor's device - and every broadcast (FM, LoRa). Empty means the plugin sends nothing.",
+                    "items": {
+                        "$ref": "#/$defs/privacySend"
+                    }
+                },
+                "collects": {
+                    "type": "array",
+                    "description": "Data the plugin keeps about people. Empty means nothing beyond the operator's own settings.",
+                    "items": {
+                        "$ref": "#/$defs/privacyCollect"
+                    }
+                },
+                "sensors": {
+                    "type": "array",
+                    "description": "Cameras, microphones and other sensors the plugin reads. Empty means none. A camera stream that leaves the device is also a `sends` entry.",
+                    "items": {
+                        "$ref": "#/$defs/privacySensor"
+                    }
+                },
+                "remoteAccess": {
+                    "type": "string",
+                    "enum": [
+                        "none",
+                        "lan",
+                        "internet-authenticated",
+                        "internet-open",
+                        "exposes-fpp",
+                        "tunnel"
+                    ],
+                    "description": "The plugin's OWN listener, at its widest reach: `none` (nothing, or only routes on FPP's web server), `lan` (a port on the local network), `internet-authenticated` / `internet-open` (a port meant to be reached from the internet, with / without a login), `exposes-fpp` (puts FPP's own pages on the internet), `tunnel` (bundles a tunnel or overlay network that lets an outside service reach this device)."
+                },
+                "systemChanges": {
+                    "type": "array",
+                    "description": "Every change outside the plugin's own directory. Empty means nothing outside its own directory.",
+                    "items": {
+                        "$ref": "#/$defs/privacySystemChange"
+                    }
+                },
+                "closedCode": {
+                    "type": "boolean",
+                    "description": "true if anything that runs is not in the repository and not from a public package source (apt, pip, npm, CPAN or similar): a prebuilt binary, a downloaded .so, a vendor installer, an obfuscated script."
+                },
+                "other": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Anything the keys above cannot say - what is left behind after uninstall, a visitor-facing page hosted by a vendor, payments taken. \"none\" if nothing."
+                }
+            }
+        },
+        "privacySend": {
+            "type": "object",
+            "required": [
+                "to",
+                "what",
+                "why",
+                "alwaysOn"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "to": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "A hostname (\"api.twilio.com\"; a bare domain covers its subdomains); or a phrase for an operator-entered address (\"your MQTT broker\", \"the FPP players you list\"); or a broadcast (\"anyone in FM range\"). Starts with \"http://\" when the connection is unencrypted. GitHub hosts (github.com, api.github.com, raw.githubusercontent.com, *.github.io) are never listed here: fetching code, releases, update checks or a package from GitHub is traffic FPP's plugin manager already makes; a downloaded program is a systemChanges entry of kind download."
+                },
+                "what": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "What is sent, in words. Say \"CPU serial number\" / \"MAC address\" if a hardware identifier is sent. 1-100 characters (the listing check warns over 100)."
+                },
+                "why": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Purpose, in words. 1-100 characters (the listing check warns over 100)."
+                },
+                "alwaysOn": {
+                    "type": "boolean",
+                    "description": "true if it sends before the operator turns anything on (at install, at boot, while fppd runs)."
+                }
+            }
+        },
+        "privacyCollect": {
+            "type": "object",
+            "required": [
+                "what",
+                "about",
+                "keptDays",
+                "canDelete",
+                "where"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "what": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "What is kept, in words. 1-100 characters (the listing check warns over 100)."
+                },
+                "about": {
+                    "type": "string",
+                    "enum": [
+                        "operator",
+                        "household",
+                        "visitors",
+                        "passers-by",
+                        "third-parties",
+                        "performers"
+                    ],
+                    "description": "Whom it is about. `operator` is the FPP owner; `household` people at the property; `visitors` people who interact with the show; `passers-by` people captured without interacting (camera, presence); `third-parties` people in content (messages, contacts); `performers`."
+                },
+                "keptDays": {
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "minimum": 0,
+                    "description": "How long it is kept, in days. null = kept until deleted by hand."
+                },
+                "canDelete": {
+                    "type": "boolean",
+                    "description": "true if a control in the plugin's UI deletes it."
+                },
+                "where": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Path under /home/fpp/media/ (\"plugindata/fpp-x/\", \"config/plugin.fpp-x\"), or \"plugin log\". Feeds the crash-bundle exclusion and the backup page."
+                }
+            }
+        },
+        "privacySensor": {
+            "type": "object",
+            "required": [
+                "type",
+                "stored"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "camera",
+                        "microphone",
+                        "face-tracking",
+                        "body-tracking",
+                        "presence",
+                        "rfid",
+                        "gpio-input"
+                    ]
+                },
+                "stored": {
+                    "type": "boolean",
+                    "description": "true if frames, audio or detections are written to disk."
+                }
+            }
+        },
+        "privacySystemChange": {
+            "type": "object",
+            "required": [
+                "kind",
+                "what"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": [
+                        "service",
+                        "network",
+                        "core-settings",
+                        "download",
+                        "package-source",
+                        "tunnel",
+                        "reads-core-credentials",
+                        "privilege"
+                    ],
+                    "description": "`service` (units, daemons, cron, mounts, shares) · `network` (a LAN port, mDNS, a port-forward instruction) · `core-settings` (writes FPP's own files or settings) · `download` (extra software fetched at install, a self-update, a runtime download) · `package-source` (an apt/pip/npm source added) · `tunnel` (overlay network, remote-access tunnel) · `reads-core-credentials` (reads FPP's own passwords or tokens) · `privilege` (sudoers, groups, kernel modules, keys on other hosts)."
+                },
+                "what": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "One line: \"enables smbd\", \"adds fpp to the video group\", \"downloads the Piper voice models from huggingface.co\". Name the host of a download or package source so the listing check can match it. 1-120 characters (the listing check warns over 120)."
                 }
             }
         }

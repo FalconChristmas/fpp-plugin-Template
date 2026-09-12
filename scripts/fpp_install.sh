@@ -8,6 +8,7 @@ set -e
 
 # Add required Apache CSP (Content-Security-Policy allowed domains
 # Possible Keys are: 'default-src', 'connect-src', 'img-src', 'script-src', 'style-src', 'object-src'
+# Every domain added here receives the user's IP address on each page view, so it must be named in pluginInfo.json's description (PLUGIN_GUIDELINES.md 14.1)
 # Examples:
 # ${FPPDIR}/scripts/ManageApacheContentPolicy.sh add connect-src https://domaintotrust.co.uk
 # ${FPPDIR}/scripts/ManageApacheContentPolicy.sh add img-src https://anotherdomain.com

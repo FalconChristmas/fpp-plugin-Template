@@ -83,7 +83,10 @@ rotation — that discards the log every restart.) Rolling your own rotation fig
 FPP's.
 
 1.3 **Nothing else logs.** Don't spam syslog, don't leave logs inside your plugin
-directory or `/tmp`, and don't log secrets (tokens, passwords, PATs).
+directory or `/tmp`, and don't log secrets (tokens, passwords, PATs). At the
+default log level, never log credentials, phone numbers, message bodies or
+e-mail addresses — a debug level the operator opts into may carry more, the
+default may not (see §14.4 and §14.5).
 
 1.4 The `plugin-` prefix and the shared logs directory are what let FPP rotate
 plugin logs aggressively (separately from its own logs) and surface them in the
@@ -390,13 +393,24 @@ safely around a running show.
 
 4.3 Don't disable or reconfigure core FPP services or system configuration.
 
+4.4 **The installer may not change the host's network exposure.** `fpp_install.sh`
+(and the start/stop hooks) must not enable Samba or another file-sharing
+service, open a listening port, join an overlay network, or set up a tunnel.
+Anything of that kind is opt-in from the plugin's own config page after
+install, and whatever the plugin enables it must reverse on uninstall (§2.1) —
+including any edit it made to FPP's own settings file to get there. See §14
+for how this shows up in the install dialog.
+
 ### 5. Filesystem boundaries
 
 Read and write only within: your plugin directory
 (`<mediadir>/plugins/<repoName>/`), your single log file, your config in
 `config/plugin.<repoName>`, your data in `<mediadir>/plugindata/`, and paths you
 explicitly declared. Never write into other plugins, FPP core, or arbitrary system
-locations.
+locations. Writing a system file to enable a service or share is a change to
+network exposure, which the installer may not make (§4.4). Anything sensitive
+— credentials, personal data, device-bound identity — belongs in `plugindata/`,
+not `config/` (§14.11).
 
 ### 6. Dependencies
 
@@ -447,24 +461,32 @@ between FPP majors (e.g. a Python package renamed between releases) — see
 > installs gets encouraged.
 
 6.2 **If you need to install something ad-hoc from `fpp_install.sh`** (beyond
-what's declared in `dependencies`), use only `apt-get`, `npm`, or `pip` — no
-`curl|bash` bootstrappers. For Python, use `pip install --break-system-packages`
+what's declared in `dependencies`), use only the public package managers that
+already ship on the FPP image — `apt-get`, `npm`, `pip`, and `cpan` for Perl
+(prefer `apt-get install lib<module>-perl` when Debian packages the module;
+`cpan` fetches and builds from CPAN mirrors as root, which is slow on a Pi) —
+no `curl|bash` bootstrappers. For Python, use `pip install --break-system-packages`
 (see §6.1 for why this is safe, not a corruption risk) — but prefer declaring it
 in `dependencies.python` (§6.1) over doing this ad hoc at all.
 
 > **Don't install another package manager to get your dependency in.** `apt-get`,
-> `npm`, and `pip` already ship with FPP — reaching for a different one (pipx,
-> poetry, conda, nvm, cargo, ...) because it's more convenient for your specific
-> package adds a whole extra layer FPP doesn't control: its own bootstrap step
+> `npm`, `pip` and `cpan` already ship with FPP — reaching for a different one
+> (gem, cargo, pipx, poetry, conda, nvm, ...) because it's more convenient for
+> your specific package adds a whole extra layer FPP doesn't control: its own bootstrap step
 > (which can fail independently of everything else), its own config/behavior
 > that can silently drift from what the rest of FPP assumes, and one more thing
-> every plugin author and FPP maintainer needs to know to debug an install. FPP
-> itself used to install `uv` this way specifically to avoid `pip
-> --break-system-packages` — that reasoning turned out to be based on an
-> untested assumption about `uv`'s behavior (see git history), and the extra
-> tool was later removed. If `apt-get`/`npm`/`pip` genuinely can't get you what
-> you need, that's a sign to build from source or vendor the dependency, not to
-> add a fourth installer.
+> every plugin author and FPP maintainer needs to know to debug an install.
+> If `apt-get`/`npm`/`pip`/`cpan` genuinely can't get
+> you what you need, that's a sign to build from source or vendor the
+> dependency, not to add another installer. gem, cargo and any other package
+> manager that is not already on the image are **not allowed** unless described
+> in the `privacy` block (a `systemChanges` entry of kind `download`) and named
+> in the description: everything fetched at install time runs as root, and
+> every host it is fetched from is a recipient of the user's IP address (§14.1).
+> Packages taken from the default apt, PyPI, npm and CPAN sources are *not* a
+> `download` and need no `privacy` entry — the "Can it be checked?" light
+> counts a public package source as checkable code. The same goes for adding
+> a package *source* — see §14.14.
 
 6.3 Anything else your install genuinely needs belongs in `fpp_install.sh`, and
 stays inside your plugin directory.
@@ -535,6 +557,11 @@ usage stats" endpoint. The only exception is data transmission that's
 essential to the plugin's actual function (e.g. a weather plugin fetching
 weather data, a plugin calling its own cloud service to do the thing it
 exists to do) - not usage/analytics collection layered on top of that.
+"Essential" is bounded by §14.1 to §14.3: an essential transmission is allowed
+only when the recipient is named in the description, it is off by default
+(or is the one service the plugin exists to talk to), and it carries only
+what that purpose needs - no hostname, serial, version or settings riding
+along "because the API accepts them".
 
 If you have a genuine need to collect usage statistics, don't build your own
 reporting channel - talk to the FPP developers about extending FPP's existing
@@ -566,6 +593,355 @@ transparency requirement. Say what the service is and why it's needed, e.g.
 "*Uses Dataplicity to expose a public HTTPS endpoint so \<Provider\> can send
 webhook events to your Pi.*"
 
+### 14. Privacy and personal data
+
+A plugin runs as root on a device that sits on someone's home network, plays
+their show, and — depending on the plugin — may hold their credentials, talk to
+services on their behalf, or handle data about visitors who never agreed to
+anything. FPP builds the install confirmation dialog from the `privacy` block
+in your `pluginInfo.json` (see `PLUGININFO_FORMAT.md`), so the rules below are
+both what a good plugin does and what you describe there. They apply equally to
+official and community plugins. §13 (disclose tunnelling services) is a
+special case of 14.1.
+
+You do not have to write the block by hand. The
+[Privacy declaration builder](https://falconchristmas.github.io/fpp-data/plugin_privacy_builder/)
+(`?repo=owner/repo` pre-fills from your repo, or paste the JSON) walks
+through the eight keys one at a time with the schema's own wording, applies
+the same rules as the listing check while you type (GitHub hosts, `http://`,
+hardware identifiers, `why` casing, length caps) and hands back the block on
+its own or merged into your whole `pluginInfo.json`. The
+[Plugin preview](https://falconchristmas.github.io/fpp-data/plugin_preview/)
+then shows the card and install dialog FPP will build from it (§14.15).
+
+14.1 **Name every off-box recipient up front.** Every host your plugin sends
+to or fetches from — a cloud API, a content filter, a mail server, an MQTT
+broker, a licence server, a package source other than the default apt, PyPI,
+npm and CPAN ones — is
+named in `pluginInfo.json`'s `description` (and in the `privacy` block's
+`sends`), with *what* is sent and *why*. §13 already requires this for
+tunnelling services; it applies to every recipient. "Profanity checker" is not
+a disclosure when the checker is a third-party API that receives every message
+a visitor sends; "installs from the vendor's own repository" is a recipient
+too. A user reads the
+description before installing and should not discover a recipient by watching
+their router.
+
+14.2 **Anything that transmits is off until the user turns it on.** No default
+setting may send data to an optional third-party service. The one exception is
+the single service the plugin exists to talk to (a weather plugin's weather
+API, a vendor plugin's own vendor), and that one is named in the description
+and the block's `summary`. A feature that *can* use a remote provider (say, a
+filter with a local and a remote engine) defaults to the local one.
+
+14.3 **Send only what the purpose needs.** Don't include the hostname, CPU
+serial, IP address, FPP version, installed-plugin list, settings or the
+contents of a whole mailbox unless the service genuinely cannot work without
+them. Fetching "everything" and filtering locally still sent everything.
+
+14.4 **Credentials.** Any setting holding a password, token, API key or secret:
+
+- has a key name containing `Password`, `Token`, `Key` or `Secret`, and is
+  declared `type: password` in the plugin's `settings.json` (both are what
+  FPP's redaction keys on);
+- is rendered with `inputType='password'` in the config UI;
+- is never written to the log (§1.3), never placed in a URL, and never passed
+  on a subprocess command line (`sshpass -p`, `curl -u user:pass`,
+  `mysql -p…` all show up in `ps` for anything on the box — use the
+  environment or a `0600` file instead);
+- lives in a file that is `0600`, never `0777`.
+
+Be aware that the crash-report bundle at its fullest level copies **all of
+`config/`** and redacts by key name only — so a secret under a key like
+`apikey` or `mailpass` ships in clear. That is why the key-name rule exists,
+and why 14.11 moves secrets out of `config/` altogether.
+
+14.5 **Personal data about people other than the operator.** Phone numbers,
+message text, e-mail addresses, names, photos, camera frames, audio, and
+records of visitor interactions (song requests, votes, doorbell presses):
+
+- say in the description that the plugin collects it, from whom, and where it
+  is kept (and describe it under `collects` in the `privacy` block);
+- keep it out of the log at the default level (§1.3);
+- give it a retention limit with automatic purge — default 30 days or less —
+  and a delete control in the UI;
+- never send it off-box except to the recipient disclosed for that purpose.
+
+A visitor message that lands in a database, a JSON file *and* the log, and is
+never deleted from any of them, fails all four.
+
+14.6 **Cameras and microphones.** If the plugin uses either, the description
+says whether frames or audio are stored, streamed (and where to) or discarded
+immediately, and reminds the operator of their own obligations if a camera
+covers a public area (footpath, street). "We discard everything" is worth
+saying — silence reads as "we keep it".
+
+14.7 **Radio and broadcast.** An FM/RDS, LoRa, or similar plugin says what it
+broadcasts, that anyone in range receives it, and whether it is encrypted.
+
+14.8 **A privacy control shown in the UI must do what it says.** A "delete after
+download" checkbox that deletes nothing, or a "disable" command that writes
+the wrong key, is worse than no control: the operator believes they are
+protected. Test every privacy-related setting end to end.
+
+14.9 **Never read or write FPP's privacy settings.** These eight keys are the
+operator's decisions about *their* data and are off limits to plugins entirely:
+
+`statsPublish`, `statsPublishUrl`, `ShareCrashData`, `FetchVendorLogos`,
+`SendVendorSerial`, `SendVendorLogos`, `privacyConsent` and
+`LegalJurisdiction`.
+
+A write to `statsPublish` causes FPP to publish statistics within two
+minutes, so this is a rule about a plugin transmitting on the operator's
+behalf. The listing check fails on **any** write to these keys. Reading core
+*credential* settings (`password`, the Wi-Fi PSK, `MQTTPassword`, `emailpass`,
+`remoteToken`, OAuth secrets) is allowed only when described in the
+`privacy` block as a `systemChanges` entry of kind `reads-core-credentials`
+(which earns a red System changes light) and needed for the stated purpose — and for a native
+plugin that includes the in-memory `getSetting()` path, not just the file.
+
+14.10 **Inbound webhooks authenticate the caller** before the body is read —
+a signature, a token, or the vendor's own request validator (vendoring the
+validator and never calling it does not count). The help text next to any
+"forward a port to this box" instruction must say plainly that doing so
+exposes the whole FPP UI, which has no password by default.
+
+14.11 **Store credentials, personal data and device-bound identity in
+`plugindata/`, not `config/`.** Two FPP mechanisms make `config/` the wrong
+place for anything sensitive: the crash bundler copies all of `config/` at its
+fullest level and never reads `plugindata/`; and the JSON backup always carries
+every plugin config in clear, so a restore writes it onto whichever player
+receives it — pairing tokens, hardware-bound licences and invited-user
+databases included. Non-sensitive settings may stay in `config/plugin.<repoName>`
+(§3.5); tokens, passwords, visitor databases and anything tied to this specific
+device go under `<mediadir>/plugindata/<repoName>/`, mode `0600`.
+
+14.12 **Traffic through FPP's own helpers is the plugin's traffic.** Publishing
+on FPP's MQTT connection, fetching through `CurlManager` or `urlGet`, or
+registering HTTP routes with `registerPluginApi()` counts as sending or
+listening and must be disclosed and described in the `privacy` block exactly
+as if the plugin opened the socket itself. "My source contains no network call" is not a defence
+when every message goes out via core.
+
+14.13 **In-process plugins gate themselves.** A native (shared-library) plugin
+is loaded at boot and is active whenever `fppd` runs, regardless of any
+checkbox on its config page. Every listener and every publisher must be off
+until the plugin's *own* enable setting is on — a fresh install must not start
+receiving triggers or publishing state while the UI shows it disabled. A send
+that happens whenever `fppd` runs, regardless of that setting, is
+`alwaysOn: true` in the `privacy` block. A Python daemon started from a
+callback is treated the same way.
+
+#### 14.14 Package sources
+
+Adding a package source (`/etc/apt/sources.list.d/`, a pip `index-url`, an
+npm registry, a Docker or Flatpak remote) hands the operator of that source
+root on the device, forever. The default answer is **no**. It is allowed only
+when the package exists in no Debian or Raspberry Pi OS archive, and then all
+of the following hold:
+
+- it is described in the `privacy` block as a `systemChanges` entry of kind
+  `package-source`, with the host and the package names in `what`, and named
+  in the description;
+- the signing key ships **in your repo** and is written to
+  `/etc/apt/keyrings/` and referenced with `Signed-By` — never
+  `curl … | apt-key add`, never `trusted=yes`;
+- an apt preferences file pins the source to the named packages only, so it
+  can never supply `libc`, `apache2`, or FPP itself;
+- `fpp_uninstall.sh` removes the source, the keyring and the preferences file
+  (§2.1).
+
+A source needed only by an optional feature is added from a button *after*
+install, with the same disclosure, not from `fpp_install.sh`. FPP snapshots
+the apt, pip and npm source files and the set of enabled services before
+running `fpp_install.sh`, diffs them afterwards, and reports any undeclared
+change in red on the install log and on the plugin's card.
+
+#### 14.15 How the install dialog is coloured
+
+FPP computes six lights from your `privacy` block — you never pick a colour,
+and every sentence in the dialog is FPP's, with your text inserted only as
+fragments (`to`, `what`, `why`, `where`, `systemChanges[].what`, `summary`,
+`other`). The same six lights appear as dots on the Plugins page cards and in
+full in a plugin's detail modal. Red lines are always shown in the dialog;
+amber and green open on tap.
+The lights are named **Sends data · Collects data · Camera & mic · Remote
+access · System changes · Can it be checked?**
+
+You don't need an FPP box to see the result: the
+[Plugin preview](https://falconchristmas.github.io/fpp-data/plugin_preview/?repo=owner/repo)
+renders the card and the install dialog from your `pluginInfo.json` with the
+same script FPP runs (`www/js/fpp-privacy-lights.js`, loaded from the FPP
+repo), so the colours, headline, chip lines and button label below are
+exactly what it shows. Paste the JSON if the file isn't pushed yet.
+
+**What earns each colour.** Red rules are tested before amber; the first match
+wins. A `to` counts as a hostname when it contains a dotted domain
+(`[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}`, case-insensitive); anything else is
+an operator-entered phrase or a broadcast. A `what` names a hardware
+identifier when it contains `serial`, `serial number`, `mac`, `mac address`,
+`uuid`, `hardware id`, `hwid` or `hw id` as a word.
+
+| Light | Green | Amber | Red |
+|---|---|---|---|
+| Sends data | `sends` empty | any send (including `http://` to an operator-entered address) | any `what` naming a hardware identifier → "Sends identifying data"; any `alwaysOn` send to a hostname → "Sends to the internet on its own"; any `to` starting `http://` **to a hostname** → "Sends unencrypted to the internet" |
+| Collects data | `collects` empty | any collects | `about` visitors/passers-by with `keptDays` null; `about` third-parties or performers |
+| Camera & mic | `sensors` empty | any sensor: camera/microphone → "Camera, not stored"; any other type → "Uses a sensor, not stored" | `stored` true; type face-/body-tracking |
+| Remote access | `none` | `lan`, `internet-authenticated` | `internet-open`, `exposes-fpp`, `tunnel` |
+| System changes | `systemChanges` empty | any change | any kind in `package-source`, `tunnel`, `reads-core-credentials`, `privilege` |
+| Open code | `closedCode` false and no `download` | any `download` kind | `closedCode` true |
+
+**How each colour is phrased.** This is FPP's text, never yours:
+
+| Light | Green | Amber | Red |
+|---|---|---|---|
+| Sends data | No sending disclosed | Sends when enabled | Sends to the internet on its own · Sends unencrypted to the internet · Sends identifying data (per rule) |
+| Collects data | No collection disclosed | Collects, with limits | Collects visitor data |
+| Camera & mic | No camera or mic disclosed | Camera, not stored · Uses a sensor, not stored (per rule) | Records people |
+| Remote access | No remote access disclosed | Remote access, off by default | Can be reached from the internet |
+| System changes | No system changes disclosed | Changes this device | Changes this device permanently |
+| Open code | Author says all its software can be checked | Downloads extra software | Includes software that can't be checked |
+| No disclosure (any) | — | — | "<light name>: not disclosed" |
+
+Under each light FPP composes one line from a fixed template with your
+fragments inserted — for a send, `<to> · always on` or `· only when you use
+that feature` (plus `, unencrypted` when `to` starts with `http://`; the
+scheme itself is not shown) then `<What> — <why>.`; for a collect, `Keeps
+<what> about visitors in <where>, for 30 days, with a delete control`; for a
+sensor, `Camera · nothing kept` (the type in words, never the enum value);
+for a system change, `Service: <what>.` (kind labels: Service ·
+Network · FPP settings · Download · Package source · Tunnel · Reads FPP
+credentials · Privilege); for remote access, a fixed sentence per value. The
+green lines are attributed to you: "Author says it talks only to FPP on
+this device.", "Author says it keeps only your own settings.", "Author
+says no camera or microphone.", "Author says no way in from outside
+this device.", "Author says nothing outside its own directory.", "Author
+says everything that runs is in the repository or comes from a public
+package source such as apt, pip or npm."
+
+**The headline** above the strip is chosen by rule, first match wins:
+
+1. Open code red → **"Part of this plugin is a black box"**, with the fixed
+   explainer *"Almost every FPP plugin is made entirely of code anyone can
+   read. Part of this one is not, so nobody — not FPP, not you — can check
+   what that part does, and the disclosure below cannot be checked for it
+   either."* A closed component does not just earn its own red light; it
+   undermines every other line, because the listing check cannot compare
+   your block with code it cannot read.
+2. Collects data or Camera & mic red → "Handles other people's data".
+3. Remote access red → "Can be reached from the internet".
+4. Sends data red → the Sends chip text ("Sends to the internet on its own",
+   "Sends unencrypted to the internet" or "Sends identifying data").
+5. System changes red → "Changes this device permanently".
+6. Any send → "Author says it talks to online services" — or "Author says it
+   talks to devices on your network" when every `to` is a phrase rather than
+   a hostname.
+7. Otherwise → "Author says it runs on this device only".
+
+**Why the greens are worded differently from the reds.** The block is your
+own description and FPP does not verify it. A statement against your interest
+(an amber or red line) is credible on its face, so the dialog states it as a
+finding — "Sends identifying data", "Records people". A favourable one is only
+a claim, so every green line and headline is attributed to you — "No sending
+disclosed", "Author says…" — the label line above the headline reads "DISCLOSED
+BY THE AUTHOR · not verified by FPP", and the card shows green as a hollow dot
+rather than a filled one. Every community-plugin dialog also carries FPP's own
+warning that no block changes — untrusted third-party code that will run as
+root, able to read and change any setting including the privacy settings and
+reach anything on the network, inherently dangerous, not tested, vetted or
+guaranteed by the FPP project, install only if you trust the author — so a
+row of six greens is a description of *your* plugin as you describe it, not a
+badge. The listing check (14.16) is the one place your block is compared with
+your code.
+
+**The Install button** takes its text and colour from the worst finding, in
+the same order as the headline. It always starts with "Install"; Cancel stays
+"Cancel".
+
+| Worst finding | Button | Class |
+|---|---|---|
+| No disclosure | Install, no disclosure | btn-danger |
+| Open code red | Install, black box included | btn-danger |
+| Collects/Camera red | Install, handles others' data | btn-danger |
+| Remote red | Install, opens FPP to internet | btn-danger |
+| Sends red | Install, sends data out | btn-danger |
+| System red | Install, permanent changes | btn-danger |
+| Any amber, or any send | Install anyway | btn-warning |
+| All green | Install | btn-success |
+| Official, all green | Install | btn-success |
+
+FPP's existing developer-mode and resource warnings still force "Install
+anyway" (btn-warning at least) when they fire and the finding-based label
+would be plainer.
+
+**Plugins with no block.** Every listed plugin must carry a `privacy` block:
+the listing check's `privacy-missing` finding is a blocker for new listings
+and for updates to listed plugins. Saying nothing is never better than
+describing honestly: an undeclared plugin gets the red "Install, no
+disclosure" button.
+
+FPP's own install dialog (for a plugin installed outside the listing, or one
+installed before it carried a block) keys its rendering to the constant
+`PRIVACY_DECLARATION_REQUIRED_FROM` in `fpp-privacy-lights.js`, compared
+against the player's own date:
+
+| | Before 1 January 2027 | On or after |
+|---|---|---|
+| Lights | grey, "Not disclosed", hollow dots | red, "Not disclosed" |
+| Headline | grey "No privacy disclosure" | red **"No privacy disclosure"** with the explainer *"Every FPP plugin has been required to describe what it does with data since 1 January 2027. This one has not."* |
+| Label line | "NO DISCLOSURE · the author has not said what this plugin does with data" | same |
+| Button | "Install, no disclosure", danger | same |
+
+**Upgrades.** FPP diffs the stored block against the new one over everything
+except `summary` and `other`, and re-shows the dialog ("This update changes
+what *name* declares") before applying an update that changes it.
+
+#### 14.16 How the listing check treats these
+
+The compliance CI uses three tiers.
+
+**Blocker** (fails listing):
+
+- `privacy-unknown-key` — a key outside the eight, or outside an entry's
+  fields (a v2 key names its v3 replacement). A missing key or a value
+  outside its enum fails the schema check itself.
+- `privacy-missing` — no `privacy` block at all. A blocker for new listings
+  and for updates to listed plugins.
+- `privacy-template-text` — `summary` or `other` still carries the
+  "TEMPLATE TEXT - replace me" placeholder fpp-plugin-Template ships. A
+  blocker: the block was never filled in, and that text would otherwise be
+  shown to every installer.
+- `privacy-undeclared-*` — the code does something the block does not say:
+  `privacy-undeclared-recipients` (a host, CSP domain, MQTT publish or
+  core-helper fetch with no matching `sends` entry),
+  `privacy-undeclared-install` (a package source, `curl | sh` or install-time
+  download with no `package-source`/`download` change),
+  `privacy-undeclared-selfupdate` (`git pull` or `reset --hard` in an install
+  hook with no `download` change), `privacy-undeclared-sensors`,
+  `privacy-undeclared-listeners` (a listener with `remoteAccess: none`),
+  `privacy-undeclared-services`, `privacy-undeclared-core-config` (a write to
+  FPP's own files or settings with no `core-settings` change),
+  `privacy-undeclared-credentials` (a read of a core credential with no
+  `reads-core-credentials` change), `privacy-undeclared-privileges` (sudoers,
+  group membership, kernel module or udev rule with no `privilege` change).
+- `privacy-setting-write` — any write to the eight privacy settings (14.9).
+- 14.2, 14.4, 14.5's retention limit and delete control, 14.10, 14.12, 14.13,
+  and every point of 14.14.
+
+**Best practice** (flagged, fix expected):
+
+- `privacy-text-length` — `summary` over 200 characters, or a `what`/`why`
+  over 100 (`systemChanges[].what` over 120). Never blocks.
+- 14.6, 14.7, a one-line editable notice on visitor-facing pages, removing
+  self-update buttons in favour of FPP's upgrade path, uninstall reverting
+  every system change (including publishing empty retained MQTT messages),
+  describing local activity logs (GPIO, commands, sequences) under `collects`
+  with `about: "household"`, and saying in `other` what the vendor keeps and
+  where its policy is.
+
+**Optional**: retention of 30 days or less, and pseudonymising visitor
+identifiers (hashing phone numbers) where the feature allows.
+
 ---
 
 ## Pre-submission checklist
@@ -590,8 +966,8 @@ webhook events to your Pi.*"
 - [ ] Talks to FPP via helpers/HTTP API; no hand-editing of core FPP config.
 - [ ] Own config in `config/plugin.<repoName>`, data in `plugindata/`; all writes
       confined to the plugin directory and declared paths.
-- [ ] Whatever `fpp_install.sh` installs uses only `apt-get`/`npm`/`pip` (no
-      `curl|bash`). `pluginInfo.json` `dependencies` is optional this year
+- [ ] Whatever `fpp_install.sh` installs uses only `apt-get`/`npm`/`pip`/`cpan`
+      (no `curl|bash`, no installer that isn't already on the image). `pluginInfo.json` `dependencies` is optional this year
       (FPP 10+ only) - fine to use if you want it, not required.
 - [ ] UI verified in light **and** dark, and on a phone-width screen; no hardcoded
       colors, no fixed-pixel layout.
@@ -606,3 +982,34 @@ webhook events to your Pi.*"
 - [ ] If the plugin sets up/depends on a tunneling or remote-access service
       (Dataplicity, ngrok, Cloudflare Tunnel, Tailscale, ZeroTier, etc.), that's
       stated up front in `pluginInfo.json`'s `description` field.
+- [ ] `pluginInfo.json` carries a `privacy` block (all eight keys present,
+      `other` filled in, `summary` written for a neighbour) that matches what
+      the code does - built with the
+      [Privacy declaration builder](https://falconchristmas.github.io/fpp-data/plugin_privacy_builder/)
+      and checked in the
+      [Plugin preview](https://falconchristmas.github.io/fpp-data/plugin_preview/).
+- [ ] Every off-box host the plugin talks to is named in the `description`,
+      with what is sent and why.
+- [ ] Nothing transmits by default except the one service the plugin exists
+      for; every optional recipient is off until the user turns it on.
+- [ ] Credentials sit under password-shaped keys (`Password`/`Token`/`Key`/
+      `Secret`, `type: password`), render as password inputs, and never appear
+      in the log, a URL, or a command line.
+- [ ] Personal data about visitors has a retention limit with automatic purge
+      and a delete control, and the description says it is collected.
+- [ ] Cameras, microphones and radio say what leaves the device and what is kept.
+- [ ] Inbound webhooks verify a signature/token before reading the body.
+- [ ] `fpp_install.sh` changes nothing about network exposure (no services
+      enabled, ports opened, shares mounted, tunnels set up).
+- [ ] No package sources (apt/pip/npm/other) without a `systemChanges` entry, a shipped
+      signing key, pinning to named packages, and removal on uninstall; no
+      gem/cargo or other package manager not already on the image unless
+      described there (default apt/PyPI/npm/CPAN packages need no entry).
+- [ ] Nothing sensitive in `config/` - credentials, visitor data and
+      device-bound identity live in `plugindata/`, mode `0600`.
+- [ ] No reads or writes of FPP's privacy settings (`statsPublish`,
+      `statsPublishUrl`, `ShareCrashData`, `FetchVendorLogos`,
+      `SendVendorSerial`, `SendVendorLogos`, `privacyConsent`,
+      `LegalJurisdiction`).
+- [ ] Native/in-process plugins: every listener and publisher is off until the
+      plugin's own enable setting is on; traffic via core helpers is in `sends`.

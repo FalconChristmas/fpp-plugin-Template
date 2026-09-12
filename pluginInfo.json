@@ -9,6 +9,16 @@
 	"bugURL": "https://github.com/FalconChristmas/fpp-plugin-Template/issues",
 	"iconURL": "https://raw.githubusercontent.com/FalconChristmas/fpp-plugin-Template/master/icon.png",
 	"allowUpdates": 1,
+	"privacy": {
+		"summary": "TEMPLATE TEXT - replace me. Say what this plugin sends, keeps, senses, opens and changes (https://falconchristmas.github.io/fpp-data/plugin_privacy_builder/). If none: Runs on this device only.",
+		"sends": [],
+		"collects": [],
+		"sensors": [],
+		"remoteAccess": "none",
+		"systemChanges": [],
+		"closedCode": false,
+		"other": "TEMPLATE TEXT - replace me (write \"none\" if there is nothing to add)."
+	},
 	"versions": [
 		{
 			"minFPPVersion": "9.0",

@@ -54,6 +54,7 @@ which points at this file.
 | `delist` | boolean | optional | Set `true` to request removal from FPP's Plugin Manager list (retire the plugin). Existing installs are unaffected. Because only someone with write access to your repo can set it, it also proves ownership for a de-list request. Note this is a `fpp-data` / CI convention only — FPP itself never reads `delist`; the plugin disappears when its `pluginList.json` entry is removed. |
 | `versions` | array | **yes** | One or more compatibility entries. See below. |
 | `dependencies` | object | optional | Other things this plugin needs, installed automatically **before** the plugin's own `scripts/fpp_install.sh` runs: `packages` (apt), `python` (PyPI, via `pip`), `scripts` (script repository), and `plugins` (other FPP plugins, installed transitively). Applies to every entry in `versions[]`; a specific entry may declare its own `dependencies` too, additive to this one. See below. |
+| `privacy` | object | optional in the schema; **required for listing** | The plugin's privacy description, in plain language: what it sends and to whom, what it collects and about whom, sensors, its own remote access, changes to the device, and whether all its code can be checked. FPP builds the six-light install dialog from it. All eight keys inside it are required (arrays may be empty). See **`privacy`** below. |
 
 ---
 
@@ -332,6 +333,189 @@ after the dependencies are in place.
 
 ---
 
+## `privacy`
+
+The `privacy` object is the plugin's own description, in plain language, of
+what it does with data and with the device. FPP reads it **before install** to
+build the confirmation dialog — a one-line headline and six lights (Sends
+data, Collects data, Camera & mic, Remote access, System changes, Can it be
+checked?), each green, amber or red — and shows the same strip on the
+installed-plugins list. The colours and every sentence in the dialog are
+FPP's, computed from the block; you never choose a colour and your text is
+only ever inserted as fragments. The table of what earns each colour, and the
+wording FPP uses for it, is in `PLUGIN_GUIDELINES.md` §14.15; the rules the
+block is checked against are the rest of §14.
+
+> **Self-described, then checked.** The `fpp-data` listing review greps the
+> plugin's code against this block (`privacy-undeclared-<category>` findings)
+> and the daily re-check repeats that. A block that fails the schema or
+> contradicts the code is a listing blocker, and so is a missing block
+> (`privacy-missing`). Say what the plugin
+> actually does; a row of six greens is a description, not a badge.
+
+> **Tools.** The
+> [Privacy declaration builder](https://falconchristmas.github.io/fpp-data/plugin_privacy_builder/)
+> writes this block for you: it loads your `pluginInfo.json` from your repo
+> (`?repo=owner/repo`) or from pasted JSON, pre-fills the name and any block
+> you already have, asks about each of the eight keys in turn using the
+> wording below, and returns the block alone or merged into the whole file.
+> The [Plugin preview](https://falconchristmas.github.io/fpp-data/plugin_preview/)
+> renders the finished file as FPP's Plugin Manager will show it. Both run
+> entirely in your browser.
+
+### Keys
+
+Eight top-level keys, all required.
+
+| Key | Type | Meaning |
+|-----|------|---------|
+| `summary` | string, 1–200 chars | One or two plain sentences for the install dialog, written for a neighbour, not a developer. The listing check warns over 200. |
+| `sends` | array | One entry per place data leaves the device: `to` — a hostname (`api.twilio.com`), a phrase for an address the operator enters (`"your MQTT broker"`, `"the FPP players you list"`), or a broadcast (`"anyone in FM range"`); start it with `http://` when the connection is unencrypted (red for a hostname on the internet, amber for an address the operator enters on their own network). `what` (string, 1–100 chars) — what is sent, in words; say "CPU serial number" or "MAC address" if a hardware identifier is sent. `why` (string, 1–100 chars) — the purpose. `alwaysOn` (boolean) — `true` if it sends before the operator turns anything on. Do not list GitHub (`github.com`, `api.github.com`, `raw.githubusercontent.com`, `*.github.io`) for fetching your own code, releases, update checks or a package — FPP's plugin manager makes that traffic already; a program you download is a `systemChanges` entry of kind `download` instead. Empty means the plugin sends nothing. |
+| `collects` | array | One entry per kind of data kept on the device beyond the operator's own settings: `what` (string, 1–100 chars); `about` — one of `operator`, `household`, `visitors`, `passers-by`, `third-parties`, `performers`; `keptDays` — integer, or `null` for kept until deleted by hand; `canDelete` (boolean) — a control in the UI deletes it; `where` — a path under `/home/fpp/media/` (e.g. `plugindata/fpp-plugin-x/`), or `"plugin log"`. `where` feeds crash-bundle exclusion and the backup page. Empty means it keeps only the operator's settings. |
+| `sensors` | array | One entry per sensor that can observe a person: `type` — one of `camera`, `microphone`, `face-tracking`, `body-tracking`, `presence`, `rfid`, `gpio-input`; `stored` (boolean) — frames, audio or detections are written to disk. A camera stream that leaves the device is also a `sends` entry. Empty means none. |
+| `remoteAccess` | enum | The plugin's own listener: `none`, `lan`, `internet-authenticated`, `internet-open`, `exposes-fpp` (puts FPP's own pages on the internet), `tunnel` (bundles a tunnel an outside service can reach the device through). Routes on FPP's web server are `none`. |
+| `systemChanges` | array | One entry per change outside the plugin's own directory: `kind` — one of `service` (units, daemons, mounts, shares), `network` (LAN port, mDNS, port-forward instruction), `core-settings` (writes FPP's own files or settings), `download` (extra software at install, self-update, or at runtime), `package-source`, `tunnel` (overlay network, remote-access tunnel), `reads-core-credentials`, `privilege` (sudoers, groups, kernel modules, keys on other hosts); `what` (string, 1–120 chars) — one line. Empty means nothing outside its own directory. |
+| `closedCode` | boolean | `true` if anything that runs is not in the repository and not from a public package source (apt, pip, npm, CPAN or similar): a prebuilt binary, a downloaded .so, a vendor installer, an obfuscated script. |
+| `other` | string | Anything the keys above cannot say; `"none"` if nothing. |
+
+### Rules of the block
+
+- **All eight keys are required and may be empty.** An empty array is a
+  statement — "this plugin sends nothing" — and a missing key fails
+  validation. `other` is required free text: write `"none"` if there is
+  nothing the other keys can't express.
+- **There is no version key.** FPP renders the keys it knows and ignores the
+  rest, so an older FPP never refuses a newer manifest. Any key not in the
+  table above is ignored by FPP and **rejected by the listing check** (and by
+  the schema file next to this document), so listings stay in one vocabulary.
+- **Traffic through FPP's helpers is yours.** Publishing on core's MQTT
+  connection, fetching via `CurlManager`/`urlGet`, routes registered with
+  `registerPluginApi()`, and anything the operator's browser loads from a
+  plugin page (a CDN, fonts, an embed — every domain you add to the CSP) are
+  `sends` entries exactly as if the plugin opened the socket itself.
+- **Credentials are not in this block.** A password, token or key the plugin
+  asks for is covered by `type: "password"` on its own `settings.json` entry,
+  which the crash bundler reads (`PLUGIN_GUIDELINES.md` §14.10). Reading
+  FPP's own stored credentials is a `systemChanges` entry of kind
+  `reads-core-credentials`.
+
+### What FPP enforces from it
+
+Everything in the block is self-described, so FPP acts on it in exactly these
+places rather than trusting it for anything security-critical:
+
+1. **Crash reports.** Every path in `collects[].where` is excluded from the
+   crash bundle. The JSON backup redacts nothing by design, so the same paths
+   feed the backup page's "what a backup contains" text instead.
+2. **The install dialog and the lights.** The headline, the six lights, the
+   line under each light and the label on the Install button are all
+   computed from the block (rules and wording in `PLUGIN_GUIDELINES.md`
+   §14.15). Above it, on every community install, FPP shows its own fixed
+   warning that the plugin is untrusted third-party code running as root.
+3. **Upgrades.** The stored block is diffed against the new one over
+   everything except `summary` and `other` — that is `sends`, `collects`,
+   `sensors`, `remoteAccess`, `systemChanges` and `closedCode` — and a change
+   re-shows the dialog ("This update changes what *name* declares") before the
+   update is applied. Rewording `summary` or `other` alone does not.
+4. **No block.** A plugin with no `privacy` block cannot be listed or
+   updated: the listing check's `privacy-missing` finding is a blocker. In
+   FPP itself an unlisted or already-installed plugin without one shows
+   "Not disclosed" lights, a "No privacy disclosure" headline and an
+   "Install, no disclosure" button (grey until FPP's own 1 January 2027
+   date in `fpp-privacy-lights.js`, red after).
+
+### Writing it for a neighbour
+
+`summary`, `what`, `why` and `systemChanges[].what` are read by someone who
+is deciding whether to let this plugin onto their show — usually not a
+developer. Write them the way you would explain it to a neighbour over the
+fence. Name the data and the person it is about, not the field or the
+transport.
+
+| Instead of | Write |
+|---|---|
+| `"what": "MSISDN and body"` | `"what": "your phone number and message"` |
+| `"what": "commands; the password is never sent"` | `"what": "on, off and input commands"` — `what` lists what *is* sent; a "never sends X" claim cannot be checked by the reader and belongs nowhere |
+| `"why": "To control the projector."` | `"why": "to control the projector"` — FPP joins it after a dash (`Commands — to control the projector.`), so start it lower-case with "to …" or "so …" and no full stop |
+| `"to": "cf-worker-relay.example.workers.dev", "why": "POST /ingest"` | `"to": "the developer's own server", "why": "so the developer's server can pass the message to the sign"` — or the hostname if it is a fixed one, but the `why` still in words |
+
+Length caps: `summary` 200 characters, `sends[].what`, `sends[].why` and
+`collects[].what` 100, `systemChanges[].what` 120. The listing check warns
+(`privacy-text-length`) and never blocks on length; FPP does not truncate,
+so over-long text is shown in full and crowds the dialog. Put anything that
+will not fit in `other`. The builder applies these caps and the
+table above as you type (and flags GitHub hosts under `sends`, `http://` on a
+hostname, hardware-identifier words in `what`, and a capitalised or
+full-stopped `why`), so a block it produces should come through the listing
+check's text findings clean.
+
+### Example — a plugin that does nothing off-box
+
+This is what to write when the plugin genuinely does nothing off-box. Every
+array is empty, `remoteAccess` is `none`, `closedCode` is `false`, and `other`
+is `"none"`; it earns six greens and the headline "Author says it runs on this
+device only". The template ships the same seven structural keys but with a
+"TEMPLATE TEXT - replace me" placeholder in `summary` and `other` — the
+listing check refuses that placeholder outright (`privacy-template-text`), so
+an unedited fork cannot pass as a do-nothing plugin; write the sentence below
+yourself only once it is true.
+
+```json
+"privacy": {
+    "summary": "Runs on this device only.",
+    "sends": [],
+    "collects": [],
+    "sensors": [],
+    "remoteAccess": "none",
+    "systemChanges": [],
+    "closedCode": false,
+    "other": "none"
+}
+```
+
+### Example — a plugin that sends SMS through a vendor and keeps visitor messages
+
+A complete block for a plugin that lets visitors text song requests to the
+show, delivered through Twilio:
+
+```json
+"privacy": {
+    "summary": "Lets visitors text song requests to your show. Their phone number and message go to Twilio (the SMS company) and are kept on this device for 30 days.",
+    "sends": [
+        {
+            "to": "api.twilio.com",
+            "what": "visitor phone numbers and messages",
+            "why": "to send and receive the text messages",
+            "alwaysOn": false
+        }
+    ],
+    "collects": [
+        {
+            "what": "visitor phone numbers and messages",
+            "about": "visitors",
+            "keptDays": 30,
+            "canDelete": true,
+            "where": "plugindata/fpp-plugin-TwilioControl/"
+        }
+    ],
+    "sensors": [],
+    "remoteAccess": "none",
+    "systemChanges": [],
+    "closedCode": false,
+    "other": "none"
+}
+```
+
+That plugin shows amber on **Sends data** ("Sends when enabled" — the send is
+to a hostname but only when the feature is on, and names no hardware
+identifier), amber on **Collects data** ("Collects, with limits" — visitor
+data, but with a retention limit and a delete control), and green elsewhere;
+the headline is "Author says it talks to online services" and the button
+"Install anyway". Setting `keptDays` to `null` would turn Collects data red
+("Collects visitor data") and the headline to "Handles other people's data".
+
+---
+
 ## Fields you should NOT set
 
 These are added by FPP at install time and must **not** be authored in your
@@ -369,6 +553,9 @@ These are added by FPP at install time and must **not** be authored in your
 
 - `repoName` / `name` / `author` / `description` / `homeURL` / `srcURL` /
   `bugURL` / `versions` are the required fields.
+- A listed plugin also carries a `privacy` block (see above); it is left out
+  of this minimal example only for brevity — the template's own
+  `pluginInfo.json` shows the complete shape.
 - The single version entry says: "install on any FPP 10.x (open-ended within
   the 10 series), from the tip of `master`, and allow updates." When FPP 11
   ships this entry will show as *untested* there until `minFPPVersion` is
