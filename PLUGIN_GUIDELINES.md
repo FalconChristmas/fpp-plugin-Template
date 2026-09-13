@@ -485,8 +485,12 @@ in `dependencies.python` (§6.1) over doing this ad hoc at all.
 > every host it is fetched from is a recipient of the user's IP address (§14.1).
 > Packages taken from the default apt, PyPI, npm and CPAN sources are *not* a
 > `download` and need no `privacy` entry — the "Can it be checked?" light
-> counts a public package source as checkable code. The same goes for adding
-> a package *source* — see §14.14.
+> counts a public package source as checkable code. So is an open-source
+> project's own release of its public code (its `.deb` from GitHub releases,
+> say): declare the fetch as a `download` system change, but `closedCode`
+> stays `false`. Only code nobody can read — a vendor binary, a downloaded
+> `.so` with no source, an obfuscated script — is `closedCode: true`. The same
+> goes for adding a package *source* — see §14.14.
 
 6.3 Anything else your install genuinely needs belongs in `fpp_install.sh`, and
 stays inside your plugin directory.
@@ -605,7 +609,7 @@ official and community plugins. §13 (disclose tunnelling services) is a
 special case of 14.1.
 
 You do not have to write the block by hand. The
-[Privacy declaration builder](https://falconchristmas.github.io/fpp-data/plugin_privacy_builder/)
+[Privacy disclosure builder](https://falconchristmas.github.io/fpp-data/plugin_privacy_builder/)
 (`?repo=owner/repo` pre-fills from your repo, or paste the JSON) walks
 through the eight keys one at a time with the schema's own wording, applies
 the same rules as the listing check while you type (GitHub hosts, `http://`,
@@ -985,7 +989,7 @@ identifiers (hashing phone numbers) where the feature allows.
 - [ ] `pluginInfo.json` carries a `privacy` block (all eight keys present,
       `other` filled in, `summary` written for a neighbour) that matches what
       the code does - built with the
-      [Privacy declaration builder](https://falconchristmas.github.io/fpp-data/plugin_privacy_builder/)
+      [Privacy disclosure builder](https://falconchristmas.github.io/fpp-data/plugin_privacy_builder/)
       and checked in the
       [Plugin preview](https://falconchristmas.github.io/fpp-data/plugin_preview/).
 - [ ] Every off-box host the plugin talks to is named in the `description`,

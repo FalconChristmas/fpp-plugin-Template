@@ -18,7 +18,7 @@ Replace it with a license of your own choosing if you'd prefer — just keep
 Two browser tools on fpp-data's site help with `pluginInfo.json` (nothing
 leaves your browser except reads of your own public repo):
 
-- [**Privacy declaration builder**](https://falconchristmas.github.io/fpp-data/plugin_privacy_builder/) -
+- [**Privacy disclosure builder**](https://falconchristmas.github.io/fpp-data/plugin_privacy_builder/) -
   writes the `privacy` block for you, one key at a time, with the same rules
   the listing check applies. Pre-fills from your repo
   (`?repo=owner/repo`) or from pasted JSON, and edits a block you already have.

@@ -354,7 +354,7 @@ block is checked against are the rest of §14.
 > actually does; a row of six greens is a description, not a badge.
 
 > **Tools.** The
-> [Privacy declaration builder](https://falconchristmas.github.io/fpp-data/plugin_privacy_builder/)
+> [Privacy disclosure builder](https://falconchristmas.github.io/fpp-data/plugin_privacy_builder/)
 > writes this block for you: it loads your `pluginInfo.json` from your repo
 > (`?repo=owner/repo`) or from pasted JSON, pre-fills the name and any block
 > you already have, asks about each of the eight keys in turn using the
@@ -375,7 +375,7 @@ Eight top-level keys, all required.
 | `sensors` | array | One entry per sensor that can observe a person: `type` — one of `camera`, `microphone`, `face-tracking`, `body-tracking`, `presence`, `rfid`, `gpio-input`; `stored` (boolean) — frames, audio or detections are written to disk. A camera stream that leaves the device is also a `sends` entry. Empty means none. |
 | `remoteAccess` | enum | The plugin's own listener: `none`, `lan`, `internet-authenticated`, `internet-open`, `exposes-fpp` (puts FPP's own pages on the internet), `tunnel` (bundles a tunnel an outside service can reach the device through). Routes on FPP's web server are `none`. |
 | `systemChanges` | array | One entry per change outside the plugin's own directory: `kind` — one of `service` (units, daemons, mounts, shares), `network` (LAN port, mDNS, port-forward instruction), `core-settings` (writes FPP's own files or settings), `download` (extra software at install, self-update, or at runtime), `package-source`, `tunnel` (overlay network, remote-access tunnel), `reads-core-credentials`, `privilege` (sudoers, groups, kernel modules, keys on other hosts); `what` (string, 1–120 chars) — one line. Empty means nothing outside its own directory. |
-| `closedCode` | boolean | `true` if anything that runs is not in the repository and not from a public package source (apt, pip, npm, CPAN or similar): a prebuilt binary, a downloaded .so, a vendor installer, an obfuscated script. |
+| `closedCode` | boolean | `true` if anything that runs cannot be read by anyone: not in the repository, not from a public package source (apt, pip, npm, CPAN or similar), and not an open-source project's own release of code that is public (a project's `.deb` from its GitHub releases is open code; a vendor's binary is not). Examples: a prebuilt binary with no public source, a downloaded `.so`, a vendor installer, an obfuscated script. A fetched package is still a `download` system change. |
 | `other` | string | Anything the keys above cannot say; `"none"` if nothing. |
 
 ### Rules of the block

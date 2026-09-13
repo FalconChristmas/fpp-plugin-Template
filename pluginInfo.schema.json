@@ -282,7 +282,7 @@
                 },
                 "closedCode": {
                     "type": "boolean",
-                    "description": "true if anything that runs is not in the repository and not from a public package source (apt, pip, npm, CPAN or similar): a prebuilt binary, a downloaded .so, a vendor installer, an obfuscated script."
+                    "description": "true if anything that runs cannot be read by anyone: not in the repository, not from a public package source (apt, pip, npm, CPAN or similar), and not an open-source project's own release of code that is public (a project's .deb from its GitHub releases is open code; a vendor's binary is not). Examples: a prebuilt binary with no public source, a downloaded .so, a vendor installer, an obfuscated script. A fetched package is still a `download` system change."
                 },
                 "other": {
                     "type": "string",
