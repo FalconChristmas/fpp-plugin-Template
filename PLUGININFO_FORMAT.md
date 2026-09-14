@@ -370,12 +370,12 @@ Eight top-level keys, all required.
 | Key | Type | Meaning |
 |-----|------|---------|
 | `summary` | string, 1–200 chars | One or two plain sentences for the install dialog, written for a neighbour, not a developer. The listing check warns over 200. |
-| `sends` | array | One entry per place data leaves the device: `to` — a hostname (`api.twilio.com`), a phrase for an address the operator enters (`"your MQTT broker"`, `"the FPP players you list"`), or a broadcast (`"anyone in FM range"`); start it with `http://` when the connection is unencrypted (red for a hostname on the internet, amber for an address the operator enters on their own network). `what` (string, 1–100 chars) — what is sent, in words; say "CPU serial number" or "MAC address" if a hardware identifier is sent. `why` (string, 1–100 chars) — the purpose. `alwaysOn` (boolean) — `true` if it sends before the operator turns anything on. Do not list GitHub (`github.com`, `api.github.com`, `raw.githubusercontent.com`, `*.github.io`) for fetching your own code, releases, update checks or a package — FPP's plugin manager makes that traffic already; a program you download is a `systemChanges` entry of kind `download` instead. Empty means the plugin sends nothing. |
-| `collects` | array | One entry per kind of data kept on the device beyond the operator's own settings: `what` (string, 1–100 chars); `about` — one of `operator`, `household`, `visitors`, `passers-by`, `third-parties`, `performers`; `keptDays` — integer, or `null` for kept until deleted by hand; `canDelete` (boolean) — a control in the UI deletes it; `where` — a path under `/home/fpp/media/` (e.g. `plugindata/fpp-plugin-x/`), or `"plugin log"`. `where` feeds crash-bundle exclusion and the backup page. Empty means it keeps only the operator's settings. |
+| `sends` | array | One entry per place data leaves the device: `to` — a hostname (`api.twilio.com`), a phrase for an address the operator enters (`"your MQTT broker"`, `"the FPP players you list"`), or a broadcast (`"anyone in FM range"`); start it with `http://` when the connection is unencrypted (red for a hostname on the internet, amber for an address the operator enters on their own network). `what` (string, 1–100 chars) — what is sent, in words; say "CPU serial number" or "MAC address" if a hardware identifier is sent. `why` (string, 1–100 chars) — the purpose. `alwaysOn` (boolean) — `true` if it sends before the operator turns anything on. A host the plugin's own pages make the operator's browser load — a CDN, a font service, a badge image — is a `sends` entry like any other hostname (`"to": "cdn.jsdelivr.net", "what": "your browser's address", "why": "page styling"`, `alwaysOn: true` if the page loads it without being asked; FPP shows it as amber "Your browser loads files from <host>", keyed on the words "your browser" in `what`, never as "Sends to the internet on its own") — **but only if the load happens.** FPP serves every plugin page under its own Content-Security-Policy (`script-src 'self'`, `style-src 'self'`, `font-src 'self' data:`, `img-src 'self' data: blob:`, `default-src 'self'`), so a `<script src="https://cdn…">` never loads unless your install script whitelists the host with `${FPPDIR}/scripts/ManageApacheContentPolicy.sh add <directive> <host>` — `script-src`, `style-src`, `img-src`, `font-src`, `connect-src`, `object-src` or `default-src` (an iframe or media load is under `default-src`) — (see `scripts/fpp_install.sh`) or the page is served by your own listener (`remoteAccess` other than `none`). Declare the host in `sends` only in those two cases; otherwise bundle the file with the plugin or remove the tag. The listing check sees these loads (`<script src>`, `<link href>`, `<img src>`, iframe and media sources, CSS `url()`/`@import`, `fetch()`/`$.ajax` literals and every host in a Content-Security-Policy `*-src` directive you set yourself), reads your `ManageApacheContentPolicy.sh add` calls, and reports a whitelisted-or-self-served host that is missing as `privacy-undeclared-recipients`; a host FPP's policy blocks is reported as `privacy-csp-blocked-load` ("bundle the file or remove the tag") instead. Do not list GitHub (`github.com`, `api.github.com`, `raw.githubusercontent.com`, `*.github.io`) for fetching your own code, releases, update checks or a package — FPP's plugin manager makes that traffic already; a program you download is a `systemChanges` entry of kind `download` instead. Empty means the plugin sends nothing. |
+| `collects` | array | One entry per kind of data kept on the device beyond the operator's own settings: `what` (string, 1–100 chars); `about` — one of `operator`, `household`, `visitors`, `passers-by`, `third-parties`, `performers`; `keptDays` — integer, or `null` for kept until deleted by hand; `canDelete` (boolean) — a control in the UI deletes it; `where` — where the operator would look for it and what to delete: a path under `/home/fpp/media/` (e.g. `plugindata/fpp-plugin-x/`), `"plugin log"`, or a phrase if it is held off the device (`"the vendor's service"`). It is written for the operator; FPP does not act on it. Empty means it keeps only the operator's settings. |
 | `sensors` | array | One entry per sensor that can observe a person: `type` — one of `camera`, `microphone`, `face-tracking`, `body-tracking`, `presence`, `rfid`, `gpio-input`; `stored` (boolean) — frames, audio or detections are written to disk. A camera stream that leaves the device is also a `sends` entry. Empty means none. |
-| `remoteAccess` | enum | The plugin's own listener: `none`, `lan`, `internet-authenticated`, `internet-open`, `exposes-fpp` (puts FPP's own pages on the internet), `tunnel` (bundles a tunnel an outside service can reach the device through). Routes on FPP's web server are `none`. |
+| `remoteAccess` | enum | The plugin's own listener: `none`, `lan`, `internet-authenticated`, `internet-open`, `exposes-fpp` (puts FPP's own pages on the internet), `tunnel` (bundles a tunnel an outside service can reach the device through). Routes on FPP's web server are `none`. `remoteAccess` is the listener's reach; `systemChanges` is what was installed or changed to get there (`tunnel`, `network`); declare both when both apply. |
 | `systemChanges` | array | One entry per change outside the plugin's own directory: `kind` — one of `service` (units, daemons, mounts, shares), `network` (LAN port, mDNS, port-forward instruction), `core-settings` (writes FPP's own files or settings), `download` (extra software at install, self-update, or at runtime), `package-source`, `tunnel` (overlay network, remote-access tunnel), `reads-core-credentials`, `privilege` (sudoers, groups, kernel modules, keys on other hosts); `what` (string, 1–120 chars) — one line. Empty means nothing outside its own directory. |
-| `closedCode` | boolean | `true` if anything that runs cannot be read by anyone: not in the repository, not from a public package source (apt, pip, npm, CPAN or similar), and not an open-source project's own release of code that is public (a project's `.deb` from its GitHub releases is open code; a vendor's binary is not). Examples: a prebuilt binary with no public source, a downloaded `.so`, a vendor installer, an obfuscated script. A fetched package is still a `download` system change. |
+| `closedCode` | boolean | `true` if anything that runs cannot be read by anyone: not in the repository, not from a public package source (apt, pip, npm, CPAN or similar) **whose source is published** (a closed binary wheel or vendor SDK from PyPI/npm is closed code), and not an open-source project's own release of code that is public (a project's `.deb` from its GitHub releases is open code; a vendor's binary is not). Examples: a prebuilt binary with no public source, a downloaded `.so`, a vendor installer, an obfuscated script. A fetched package is still a `download` system change. |
 | `other` | string | Anything the keys above cannot say; `"none"` if nothing. |
 
 ### Rules of the block
@@ -391,32 +391,43 @@ Eight top-level keys, all required.
 - **Traffic through FPP's helpers is yours.** Publishing on core's MQTT
   connection, fetching via `CurlManager`/`urlGet`, routes registered with
   `registerPluginApi()`, and anything the operator's browser loads from a
-  plugin page (a CDN, fonts, an embed — every domain you add to the CSP) are
-  `sends` entries exactly as if the plugin opened the socket itself.
+  plugin page (a CDN, fonts, an embed — every domain you add to the CSP with
+  `ManageApacheContentPolicy.sh`, or serve from your own listener; a domain
+  you do not add is blocked by FPP's CSP and never loads) are `sends`
+  entries exactly as if the plugin opened the socket itself.
 - **Credentials are not in this block.** A password, token or key the plugin
-  asks for is covered by `type: "password"` on its own `settings.json` entry,
-  which the crash bundler reads (`PLUGIN_GUIDELINES.md` §14.10). Reading
-  FPP's own stored credentials is a `systemChanges` entry of kind
-  `reads-core-credentials`.
+  asks for is protected by how it is named, not by the block: the crash
+  bundler redacts by key name — `password`, `passwd`, `passphrase`,
+  `passcode`, `pwd`, `psk`, `secret`, `token` or `credential` anywhere in the
+  key, and `pass`, `key`, `auth` or `pat` when not followed by a lowercase
+  letter (`apikey` and `authToken` are caught, `keyframe` is not) — plus FPP's own
+  settings metadata. A plugin's own `settings.json` is never read, so a key
+  like `mailcode` or `licence` ships in clear. Binaries under `config/` are
+  stubbed; text files are copied through the redactor (`PLUGIN_GUIDELINES.md`
+  §14.4, §14.11). Reading FPP's own stored credentials is a `systemChanges`
+  entry of kind `reads-core-credentials`.
 
 ### What FPP enforces from it
 
 Everything in the block is self-described, so FPP acts on it in exactly these
 places rather than trusting it for anything security-critical:
 
-1. **Crash reports.** Every path in `collects[].where` is excluded from the
-   crash bundle. The JSON backup redacts nothing by design, so the same paths
-   feed the backup page's "what a backup contains" text instead.
+1. **Nothing at run time.** `collects[].where` is for the operator — where
+   to look and what to delete. It is not read by the crash bundler (which
+   copies `config/` through its own name-based redactor, and never
+   `plugindata/`) nor by the JSON backup, which redacts nothing by design.
 2. **The install dialog and the lights.** The headline, the six lights, the
    line under each light and the label on the Install button are all
    computed from the block (rules and wording in `PLUGIN_GUIDELINES.md`
    §14.15). Above it, on every community install, FPP shows its own fixed
    warning that the plugin is untrusted third-party code running as root.
 3. **Upgrades.** The stored block is diffed against the new one over
-   everything except `summary` and `other` — that is `sends`, `collects`,
-   `sensors`, `remoteAccess`, `systemChanges` and `closedCode` — and a change
-   re-shows the dialog ("This update changes what *name* declares") before the
-   update is applied. Rewording `summary` or `other` alone does not.
+   everything except `summary` — that is `sends`, `collects`, `sensors`,
+   `remoteAccess`, `systemChanges`, `closedCode` and `other` — and a change
+   re-shows the dialog ("This update changes the privacy disclosure of *name*") before the
+   update is applied. Rewording `summary` alone does not; a change to `other`
+   does, since that is where support access, payments, self-update and the
+   like are declared (whitespace and `"none"` count as nothing).
 4. **No block.** A plugin with no `privacy` block cannot be listed or
    updated: the listing check's `privacy-missing` finding is a blocker. In
    FPP itself an unlisted or already-installed plugin without one shows
@@ -437,7 +448,7 @@ transport.
 | `"what": "MSISDN and body"` | `"what": "your phone number and message"` |
 | `"what": "commands; the password is never sent"` | `"what": "on, off and input commands"` — `what` lists what *is* sent; a "never sends X" claim cannot be checked by the reader and belongs nowhere |
 | `"why": "To control the projector."` | `"why": "to control the projector"` — FPP joins it after a dash (`Commands — to control the projector.`), so start it lower-case with "to …" or "so …" and no full stop |
-| `"to": "cf-worker-relay.example.workers.dev", "why": "POST /ingest"` | `"to": "the developer's own server", "why": "so the developer's server can pass the message to the sign"` — or the hostname if it is a fixed one, but the `why` still in words |
+| `"to": "cf-worker-relay.example.workers.dev", "why": "POST /ingest"` | `"to": "cf-worker-relay.example.workers.dev", "why": "so the developer's server can pass the message to the sign"` — keep the hostname in `to` (a fixed server is a fact the reader can check; a phrase like "the developer's own server" is for addresses the operator enters) and say who runs it in `why` |
 
 Length caps: `summary` 200 characters, `sends[].what`, `sends[].why` and
 `collects[].what` 100, `systemChanges[].what` 120. The listing check warns

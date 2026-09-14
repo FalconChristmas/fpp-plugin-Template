@@ -2,7 +2,7 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://raw.githubusercontent.com/FalconChristmas/fpp-plugin-Template/master/pluginInfo.schema.json",
     "title": "FPP pluginInfo.json",
-    "description": "Metadata file every FPP plugin ships in its repository root. Prose reference: PLUGININFO_FORMAT.md in this repo. Strictly validated: every field below is the complete recognized set, including 'version'/'requires' (legacy, ignored by FPP at runtime but explicitly allowed here so a plugin that still carries them from an older template doesn't fail validation) -- anything else is rejected.",
+    "description": "Metadata file every FPP plugin ships in its repository root. Prose reference: PLUGININFO_FORMAT.md in this repo. Strictly validated: every field below is the complete recognized set, including 'version'/'requires' (legacy, ignored by FPP at runtime but explicitly allowed here so a plugin that still carries them from an older template doesn't fail validation) and the optional 'privacy' declaration block -- anything else is rejected.",
     "type": "object",
     "required": [
         "repoName",
@@ -282,7 +282,7 @@
                 },
                 "closedCode": {
                     "type": "boolean",
-                    "description": "true if anything that runs cannot be read by anyone: not in the repository, not from a public package source (apt, pip, npm, CPAN or similar), and not an open-source project's own release of code that is public (a project's .deb from its GitHub releases is open code; a vendor's binary is not). Examples: a prebuilt binary with no public source, a downloaded .so, a vendor installer, an obfuscated script. A fetched package is still a `download` system change."
+                    "description": "true if anything that runs cannot be read by anyone: not in the repository, not from a public package source (apt, pip, npm, CPAN or similar) whose source is published (a closed binary wheel or vendor SDK from PyPI/npm is closed code), and not an open-source project's own release of code that is public (a project's .deb from its GitHub releases is open code; a vendor's binary is not). Examples: a prebuilt binary with no public source, a downloaded .so, a vendor installer, an obfuscated script. A fetched package is still a `download` system change."
                 },
                 "other": {
                     "type": "string",
@@ -365,7 +365,7 @@
                 "where": {
                     "type": "string",
                     "minLength": 1,
-                    "description": "Path under /home/fpp/media/ (\"plugindata/fpp-x/\", \"config/plugin.fpp-x\"), or \"plugin log\". Feeds the crash-bundle exclusion and the backup page."
+                    "description": "Where the operator would look for it and what to delete: a path under /home/fpp/media/ (\"plugindata/fpp-x/\", \"config/plugin.fpp-x\"), \"plugin log\", or a phrase if it is held off the device (\"the vendor's service\"). Written for the operator; FPP does not act on it."
                 }
             }
         },

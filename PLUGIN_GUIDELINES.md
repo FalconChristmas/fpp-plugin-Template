@@ -485,7 +485,9 @@ in `dependencies.python` (§6.1) over doing this ad hoc at all.
 > every host it is fetched from is a recipient of the user's IP address (§14.1).
 > Packages taken from the default apt, PyPI, npm and CPAN sources are *not* a
 > `download` and need no `privacy` entry — the "Can it be checked?" light
-> counts a public package source as checkable code. So is an open-source
+> counts a package from a public source *whose source is published* as
+> checkable code (a closed binary wheel or vendor SDK from PyPI or npm is
+> not: that is `closedCode: true`). So is an open-source
 > project's own release of its public code (its `.deb` from GitHub releases,
 > say): declare the fetch as a `download` system change, but `closedCode`
 > stays `false`. Only code nobody can read — a vendor binary, a downloaded
@@ -627,9 +629,31 @@ named in `pluginInfo.json`'s `description` (and in the `privacy` block's
 tunnelling services; it applies to every recipient. "Profanity checker" is not
 a disclosure when the checker is a third-party API that receives every message
 a visitor sends; "installs from the vendor's own repository" is a recipient
-too. A user reads the
-description before installing and should not discover a recipient by watching
-their router.
+too, and so is a CDN, font service or badge host that your own pages make
+the operator's browser load — it sees their browser's address every time the
+page opens; declare it in `sends` like any other hostname (`what`: "your
+browser's address", `why`: "page styling" or similar). That applies only
+when the load actually happens: FPP serves plugin pages under its own
+Content-Security-Policy (`script-src 'self'`, `style-src 'self'`, `font-src
+'self' data:`, `img-src 'self' data: blob:`, `default-src 'self'` for the
+rest), so a CDN tag is a dead tag unless your install script whitelists the
+host with `${FPPDIR}/scripts/ManageApacheContentPolicy.sh add <directive>
+<host>` — the script takes `script-src`, `style-src`, `img-src`, `font-src`,
+`connect-src`, `object-src` or `default-src`; an iframe or media load is
+governed by `default-src`, so that is the key to add (the Template's
+`scripts/fpp_install.sh` shows the call) — or the page
+is served by your own listener (`remoteAccess` other than `none`). If you
+whitelist it or serve it yourself, declare it in `sends`; if not, bundle the
+file with the plugin or remove the tag — FPP's own pages bundle jQuery and
+Bootstrap for the same reason (a show network is often offline). The listing
+check sees these loads (`<script src>`, `<link href>`, `<img src>`, iframe
+and media sources, CSS `url()`, `fetch()` literals, CSP `*-src` hosts you
+set yourself), reads your `ManageApacheContentPolicy.sh add` calls, and
+reports a missing whitelisted-or-self-served host as
+`privacy-undeclared-recipients`; a host FPP's policy blocks gets
+`privacy-csp-blocked-load` ("bundle the file or remove the tag") instead. A
+user reads the description before installing and should not discover a
+recipient by watching their router.
 
 14.2 **Anything that transmits is off until the user turns it on.** No default
 setting may send data to an optional third-party service. The one exception is
@@ -645,9 +669,9 @@ them. Fetching "everything" and filtering locally still sent everything.
 
 14.4 **Credentials.** Any setting holding a password, token, API key or secret:
 
-- has a key name containing `Password`, `Token`, `Key` or `Secret`, and is
-  declared `type: password` in the plugin's `settings.json` (both are what
-  FPP's redaction keys on);
+- has a key name containing `Password`, `Token`, `Key` or `Secret` (the
+  crash bundler redacts by key name — see below), and is declared
+  `type: password` in the plugin's `settings.json` so the config UI masks it;
 - is rendered with `inputType='password'` in the config UI;
 - is never written to the log (§1.3), never placed in a URL, and never passed
   on a subprocess command line (`sshpass -p`, `curl -u user:pass`,
@@ -655,10 +679,17 @@ them. Fetching "everything" and filtering locally still sent everything.
   environment or a `0600` file instead);
 - lives in a file that is `0600`, never `0777`.
 
-Be aware that the crash-report bundle at its fullest level copies **all of
-`config/`** and redacts by key name only — so a secret under a key like
-`apikey` or `mailpass` ships in clear. That is why the key-name rule exists,
-and why 14.11 moves secrets out of `config/` altogether.
+Be aware that the crash-report bundle at its fullest level copies every
+text file under `config/` through a redactor that works by key name only:
+`password`, `passwd`, `passphrase`, `passcode`, `pwd`, `psk`, `secret`,
+`token` or `credential` anywhere in the key, and `pass`, `key`, `auth` or
+`pat` when not followed by a lowercase letter (so `apikey`, `mailpass` and
+`authToken` are caught; `keyframe` is not), plus the keys
+FPP's own `settings.json` marks `type: password`. Your plugin's `settings.json`
+is never read, so a secret under a key like `mailcode` or `licence` ships in
+clear. Binary files under `config/` (SQLite, gzip) are replaced by a stub.
+That is why the key-name rule exists, and why 14.11 moves secrets out of
+`config/` altogether.
 
 14.5 **Personal data about people other than the operator.** Phone numbers,
 message text, e-mail addresses, names, photos, camera frames, audio, and
@@ -712,8 +743,10 @@ exposes the whole FPP UI, which has no password by default.
 
 14.11 **Store credentials, personal data and device-bound identity in
 `plugindata/`, not `config/`.** Two FPP mechanisms make `config/` the wrong
-place for anything sensitive: the crash bundler copies all of `config/` at its
-fullest level and never reads `plugindata/`; and the JSON backup always carries
+place for anything sensitive: the crash bundler copies every text file under
+`config/` at its fullest level (through the key-name redactor of 14.4; binary
+files such as SQLite databases are stubbed) and never reads `plugindata/`; and
+the JSON backup always carries
 every plugin config in clear, so a restore writes it onto whichever player
 receives it — pairing tokens, hardware-bound licences and invited-user
 databases included. Non-sensitive settings may stay in `config/plugin.<repoName>`
@@ -756,10 +789,10 @@ of the following hold:
   (§2.1).
 
 A source needed only by an optional feature is added from a button *after*
-install, with the same disclosure, not from `fpp_install.sh`. FPP snapshots
-the apt, pip and npm source files and the set of enabled services before
-running `fpp_install.sh`, diffs them afterwards, and reports any undeclared
-change in red on the install log and on the plugin's card.
+install, with the same disclosure, not from `fpp_install.sh`. The listing
+check compares `fpp_install.sh` and the rest of the code against the block (`privacy-undeclared-install`,
+`-services`, `-privileges`, §14.16); nothing is checked at install time on the
+player.
 
 #### 14.15 How the install dialog is coloured
 
@@ -776,36 +809,45 @@ You don't need an FPP box to see the result: the
 [Plugin preview](https://falconchristmas.github.io/fpp-data/plugin_preview/?repo=owner/repo)
 renders the card and the install dialog from your `pluginInfo.json` with the
 same script FPP runs (`www/js/fpp-privacy-lights.js`, loaded from the FPP
-repo), so the colours, headline, chip lines and button label below are
-exactly what it shows. Paste the JSON if the file isn't pushed yet.
+repo), so the colours, summary, chip lines and button label below are
+exactly what it shows (the headline appears on the card's tooltip, and in
+the dialog only when nothing is disclosed). Paste the JSON if the file isn't pushed yet.
 
 **What earns each colour.** Red rules are tested before amber; the first match
-wins. A `to` counts as a hostname when it contains a dotted domain
-(`[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}`, case-insensitive); anything else is
-an operator-entered phrase or a broadcast. A `what` names a hardware
-identifier when it contains `serial`, `serial number`, `mac`, `mac address`,
-`uuid`, `hardware id`, `hwid` or `hw id` as a word.
+wins. Green needs the key itself: a light whose key is missing (or of the
+wrong type) is grey "not disclosed" inside your block, never green, and a
+block with none of the six keys is treated as no block at all. A `to` counts
+as a hostname when it contains a dotted domain whose last label is not a
+reserved LAN suffix (`.local`, `.lan`, `.home`, `.internal`, `.localdomain`)
+or a file extension (`remotes.json`), or when it is a public IP address
+(IPv4, or IPv6 bare or in brackets); a LAN name, a private address
+(`192.168.…`, `10.…`, `fe80::…`, `fd00::…`, `::1`), an operator-entered
+phrase or a broadcast is not "the internet" and is never red. A `what` names a hardware
+identifier when it contains `serial number`, `cpu serial`, `mac address`,
+`hardware id`, `hwid`, `hw id`, `device id` or `device uuid` as words
+("serial port" and "the playlist uuid" do not count; if you really send a
+serial, write "serial number").
 
 | Light | Green | Amber | Red |
 |---|---|---|---|
-| Sends data | `sends` empty | any send (including `http://` to an operator-entered address) | any `what` naming a hardware identifier → "Sends identifying data"; any `alwaysOn` send to a hostname → "Sends to the internet on its own"; any `to` starting `http://` **to a hostname** → "Sends unencrypted to the internet" |
-| Collects data | `collects` empty | any collects | `about` visitors/passers-by with `keptDays` null; `about` third-parties or performers |
-| Camera & mic | `sensors` empty | any sensor: camera/microphone → "Camera, not stored"; any other type → "Uses a sensor, not stored" | `stored` true; type face-/body-tracking |
+| Sends data | `sends` empty | any send whose `what` says "your browser" (a page asset, 14.1: "your browser's address") → "Your browser loads files from <host>", whatever `alwaysOn` says; else any `alwaysOn` send to a LAN name or private address → "Sends on its own to a device on your network"; else any `alwaysOn` send to any other phrase (an address you enter, a broadcast, a named server, the device itself) → "Sends on its own"; any other send (including `http://` to an operator-entered address) | any `what` naming a hardware identifier → "Sends identifying data"; any `alwaysOn` send to the internet (a browser-load send excepted) → "Sends to the internet on its own"; any `to` starting `http://` **to the internet** (browser-load send excepted) → "Sends unencrypted to the internet" |
+| Collects data | `collects` empty | any collects | `about` visitors, passers-by, third-parties or performers with `keptDays` null (a time limit is what leaves red) |
+| Camera & mic | `sensors` empty | any sensor: camera/microphone not stored → "Camera, not stored"; any other type stored → "Sensor readings kept"; any other type not stored → "Uses a sensor, not stored" | `stored` true for a camera, microphone or tracker; type face-/body-tracking |
 | Remote access | `none` | `lan`, `internet-authenticated` | `internet-open`, `exposes-fpp`, `tunnel` |
-| System changes | `systemChanges` empty | any change | any kind in `package-source`, `tunnel`, `reads-core-credentials`, `privilege` |
+| System changes | `systemChanges` empty | any change | kind `package-source` or `tunnel` → "Changes this device permanently"; `reads-core-credentials` → "Reads FPP's credentials"; `privilege` → "Grants extra privileges" |
 | Open code | `closedCode` false and no `download` | any `download` kind | `closedCode` true |
 
 **How each colour is phrased.** This is FPP's text, never yours:
 
 | Light | Green | Amber | Red |
 |---|---|---|---|
-| Sends data | No sending disclosed | Sends when enabled | Sends to the internet on its own · Sends unencrypted to the internet · Sends identifying data (per rule) |
+| Sends data | No sending disclosed | Sends when enabled · Sends on its own to a device on your network · Sends on its own · Your browser loads files from <host> (per rule) | Sends to the internet on its own · Sends unencrypted to the internet · Sends identifying data (per rule) |
 | Collects data | No collection disclosed | Collects, with limits | Collects visitor data |
-| Camera & mic | No camera or mic disclosed | Camera, not stored · Uses a sensor, not stored (per rule) | Records people |
+| Camera & mic | No camera or mic disclosed | Camera, not stored · Sensor readings kept · Uses a sensor, not stored (per rule) | Records people |
 | Remote access | No remote access disclosed | Remote access, off by default | Can be reached from the internet |
-| System changes | No system changes disclosed | Changes this device | Changes this device permanently |
+| System changes | No system changes disclosed | Changes this device | Changes this device permanently · Reads FPP's credentials · Grants extra privileges (per rule) |
 | Open code | Author says all its software can be checked | Downloads extra software | Includes software that can't be checked |
-| No disclosure (any) | — | — | "<light name>: not disclosed" |
+| No disclosure (any) | — | — | "<light name>: not disclosed" (grey when only that key is missing) |
 
 Under each light FPP composes one line from a fixed template with your
 fragments inserted — for a send, `<to> · always on` or `· only when you use
@@ -836,11 +878,15 @@ package source such as apt, pip or npm."
 3. Remote access red → "Can be reached from the internet".
 4. Sends data red → the Sends chip text ("Sends to the internet on its own",
    "Sends unencrypted to the internet" or "Sends identifying data").
-5. System changes red → "Changes this device permanently".
-6. Any send → "Author says it talks to online services" — or "Author says it
-   talks to devices on your network" when every `to` is a phrase rather than
-   a hostname.
-7. Otherwise → "Author says it runs on this device only".
+5. System changes red → the System chip text ("Changes this device
+   permanently", "Reads FPP's credentials" or "Grants extra privileges").
+6. Any light grey because its key is missing → "Not everything is disclosed".
+7. Any send → "Author says it talks to online services" — or "Author says it
+   talks to devices on your network" when no `to` is on the internet.
+8. Any other amber light → that light's chip text (the first of Collects,
+   Camera, Remote, System, Open code), so a LAN listener or a camera never
+   reads as "runs on this device only".
+9. Otherwise → "Author says it runs on this device only".
 
 **Why the greens are worded differently from the reds.** The block is your
 own description and FPP does not verify it. A statement against your interest
@@ -870,7 +916,7 @@ the same order as the headline. It always starts with "Install"; Cancel stays
 | Remote red | Install, opens FPP to internet | btn-danger |
 | Sends red | Install, sends data out | btn-danger |
 | System red | Install, permanent changes | btn-danger |
-| Any amber, or any send | Install anyway | btn-warning |
+| Any amber, any send, or a light grey for a missing key | Install anyway | btn-warning |
 | All green | Install | btn-success |
 | Official, all green | Install | btn-success |
 
@@ -897,8 +943,8 @@ against the player's own date:
 | Button | "Install, no disclosure", danger | same |
 
 **Upgrades.** FPP diffs the stored block against the new one over everything
-except `summary` and `other`, and re-shows the dialog ("This update changes
-what *name* declares") before applying an update that changes it.
+except `summary` (`other` included), and re-shows the dialog ("This update changes
+the privacy disclosure of *name*") before applying an update that changes it.
 
 #### 14.16 How the listing check treats these
 
@@ -916,19 +962,30 @@ The compliance CI uses three tiers.
   blocker: the block was never filled in, and that text would otherwise be
   shown to every installer.
 - `privacy-undeclared-*` — the code does something the block does not say:
-  `privacy-undeclared-recipients` (a host, CSP domain, MQTT publish or
-  core-helper fetch with no matching `sends` entry),
+  `privacy-undeclared-recipients` (a host literal, MQTT publish or
+  core-helper fetch with no matching `sends` entry; also a host your pages
+  make the browser load — `<script src>`, `<link href>`, `<img src>`,
+  iframe/media sources, CSS `url()`, `fetch()` literals, CSP `*-src` hosts —
+  when you whitelist it with `ManageApacheContentPolicy.sh add` or serve
+  the page yourself (`remoteAccess` not `none`); worded as "loads …
+  (browser-side)" so you know to declare it with `what`: "your browser's
+  address", 14.1; an `<a href>` link is not a load),
   `privacy-undeclared-install` (a package source, `curl | sh` or install-time
   download with no `package-source`/`download` change),
   `privacy-undeclared-selfupdate` (`git pull` or `reset --hard` in an install
   hook with no `download` change), `privacy-undeclared-sensors`,
-  `privacy-undeclared-listeners` (a listener with `remoteAccess: none`),
+  `privacy-undeclared-listeners` (a listener with `remoteAccess: none` and no
+  `network` or `tunnel` system change naming it),
   `privacy-undeclared-services`, `privacy-undeclared-core-config` (a write to
   FPP's own files or settings with no `core-settings` change),
   `privacy-undeclared-credentials` (a read of a core credential with no
   `reads-core-credentials` change), `privacy-undeclared-privileges` (sudoers,
   group membership, kernel module or udev rule with no `privilege` change).
 - `privacy-setting-write` — any write to the eight privacy settings (14.9).
+- `privacy-setting-read` (best practice) — reading one of them to decide
+  whether the plugin may send: FPP's consent settings are the operator's
+  answer to FPP, not to the plugin; gate your own traffic on your own
+  setting, off by default.
 - 14.2, 14.4, 14.5's retention limit and delete control, 14.10, 14.12, 14.13,
   and every point of 14.14.
 
@@ -936,6 +993,23 @@ The compliance CI uses three tiers.
 
 - `privacy-text-length` — `summary` over 200 characters, or a `what`/`why`
   over 100 (`systemChanges[].what` over 120). Never blocks.
+- `privacy-csp-blocked-load` — a page loads a script, stylesheet, font,
+  image, frame, media file or `fetch()` URL from a host FPP's
+  Content-Security-Policy blocks (nothing in the plugin adds it with
+  `ManageApacheContentPolicy.sh add <directive> <host>`, and the page is
+  served by FPP, not by your own listener). It never loads, so it is not a
+  `sends` entry: bundle the file with the plugin or remove the tag; if you
+  do want it, whitelist it and declare it (14.1). Fires even when `sends`
+  already names the host — that entry then describes traffic that does not
+  happen.
+- `privacy-closedcode-unverified` — `closedCode` is `false` but the install
+  script or code takes a package from pip, npm, CPAN or similar, or fetches a
+  binary or archive with `curl`/`wget` (`apt-get` and `dpkg` installs are not
+  counted; a `.deb` fetched by URL is). The
+  check cannot tell a published-source package from a closed wheel or vendor
+  SDK, so it names each package page or URL for the reviewer to check; it
+  is reported on every run and does not block listing. Never fires with
+  `closedCode: true`.
 - 14.6, 14.7, a one-line editable notice on visitor-facing pages, removing
   self-update buttons in favour of FPP's upgrade path, uninstall reverting
   every system change (including publishing empty retained MQTT messages),
