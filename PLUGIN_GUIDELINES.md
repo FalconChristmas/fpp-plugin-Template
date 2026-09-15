@@ -844,7 +844,7 @@ serial, write "serial number").
 | Sends data | No sending disclosed | Sends when enabled · Sends on its own to a device on your network · Sends on its own · Your browser loads files from <host> (per rule) | Sends to the internet on its own · Sends unencrypted to the internet · Sends identifying data (per rule) |
 | Collects data | No collection disclosed | Collects, with limits | Collects visitor data |
 | Camera & mic | No camera or mic disclosed | Camera, not stored · Sensor readings kept · Uses a sensor, not stored (per rule) | Records people |
-| Remote access | No remote access disclosed | Remote access, off by default | Can be reached from the internet |
+| Remote access | No remote access disclosed | Listens on your network · Reachable from the internet, with a login (per value; an unknown value reads Listens for connections) | Can be reached from the internet |
 | System changes | No system changes disclosed | Changes this device | Changes this device permanently · Reads FPP's credentials · Grants extra privileges (per rule) |
 | Open code | Author says all its software can be checked | Downloads extra software | Includes software that can't be checked |
 | No disclosure (any) | — | — | "<light name>: not disclosed" (grey when only that key is missing) |
@@ -857,8 +857,12 @@ scheme itself is not shown) then `<What> — <why>.`; for a collect, `Keeps
 sensor, `Camera · nothing kept` (the type in words, never the enum value);
 for a system change, `Service: <what>.` (kind labels: Service ·
 Network · FPP settings · Download · Package source · Tunnel · Reads FPP
-credentials · Privilege); for remote access, a fixed sentence per value. The
-green lines are attributed to you: "Author says it talks only to FPP on
+credentials · Privilege); for remote access, a fixed sentence per value; for
+Open code, "Includes software whose source is not available." when
+`closedCode` is true and, when any `download` change exists, FPP's own
+sentence *"Installs extra software from a public source; see System
+changes."* -- the download itself is listed once, under System changes, not
+repeated. The green lines are attributed to you: "Author says it talks only to FPP on
 this device.", "Author says it keeps only your own settings.", "Author
 says no camera or microphone.", "Author says no way in from outside
 this device.", "Author says nothing outside its own directory.", "Author
