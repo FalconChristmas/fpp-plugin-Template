@@ -137,6 +137,9 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') your message" >> "$PLUGIN_LOG"
 FPP runs `scripts/fpp_install.sh` after cloning your repo, and
 `scripts/fpp_uninstall.sh` when the plugin is removed. It also runs
 `scripts/{preStart,postStart,preStop,postStop}.sh` around each `fppd` start/stop.
+Three more scripts are optional and only consulted by the Plugin Manager's
+update flow: `scripts/fpp_upgrade.sh`, `scripts/fpp_update_check.sh` and
+`scripts/fpp_releasenotes.sh` (§2.11).
 
 2.1 **Undo everything on uninstall.** Every side effect your install (or
 `preStart.sh`/`postStart.sh`) creates *outside* the plugin directory must be
@@ -304,6 +307,36 @@ Two safety notes: a plugin can't claim a path FPP core already documents (its
 entry is silently ignored, not overwritten), and a malformed `apiDocs.json`
 is logged and skipped rather than breaking the API page for anyone else.
 
+2.11 **The optional update-flow scripts.** Besides the lifecycle hooks above,
+the Plugin Manager looks for three more scripts in `scripts/`, none of them
+required:
+
+- **`fpp_upgrade.sh`** — run by the **Update** button *instead of*
+  re-running `fpp_install.sh`, when it exists (§2.7). Runs as **root**, so the
+  §2.4 no-`sudo` rule applies. If you have one, it needs its own
+  `setSetting restartFlag 1` where the install script has one.
+- **`fpp_update_check.sh`** — lets a plugin whose updates aren't git commits
+  (a prebuilt component fetched at install, say) report them. Run with
+  `FPPDIR`/`SRCDIR` set; the **last line of stdout** must be `1` (update
+  available) or `0` (none). Its answer is OR'd with FPP's own
+  `git log HEAD..origin/<branch>` check, so ordinary commits are still seen.
+  A non-zero exit means "couldn't check" and is ignored.
+- **`fpp_releasenotes.sh`** — the body of the **Release Notes** dialog when
+  `pluginInfo.json` declares `"releaseNotesStyle": "script"` (the other two
+  styles, `gitRelease` and `gitHistory`, need no script at all — see
+  `PLUGININFO_FORMAT.md` › *Release notes*). Run with `FPPDIR`/`SRCDIR` set,
+  and its stdout is shown verbatim as plain text.
+
+  Unlike every other script in this section, `fpp_releasenotes.sh` runs as the
+  **web user (`fpp`), not root, synchronously while the user waits on the
+  dialog**. So: no `sudo` (nothing to elevate for, and a prompt would hang the
+  request), no downloads or builds, no `sleep` — read a changelog you ship in
+  the repo, or a file your update check already cached, and exit `0` with
+  something printed (a non-zero exit or empty output shows a "no release notes
+  available" message). Output is HTML-escaped on display, so markdown or HTML
+  in it shows up literally. The template's `scripts/fpp_releasenotes.sh` is a
+  working example.
+
 ### 3. Talk to FPP through its interfaces, not its internals
 
 Use FPP's stable, documented surfaces; don't reach into its files or process
@@ -436,6 +469,11 @@ in `fpp_install.sh`. A specific `versions[]` entry may also carry its own
 `dependencies`, additional to the top-level ones, for something that differs
 between FPP majors (e.g. a Python package renamed between releases) — see
 `PLUGININFO_FORMAT.md`.
+
+Declared apt packages are reference-counted and removed when the last plugin
+that needs them is uninstalled — except packages that were already on the box
+when first declared, which FPP never removes. See "Package ownership and
+removal" in `PLUGININFO_FORMAT.md`.
 
 > **Python dependencies are installed system-wide, not per-plugin.** Unlike
 > `packages` (apt), they are not reference-counted or isolated: two plugins
@@ -1033,6 +1071,9 @@ identifiers (hashing phone numbers) where the feature allows.
 - [ ] `fpp_uninstall.sh` removes every service / timer / cron entry / symlink /
       out-of-tree file the plugin created, and is safe to run twice.
 - [ ] `fpp_install.sh` is safe to re-run (via Reinstall All) without side effects.
+- [ ] If `releaseNotesStyle` is `"script"`, `scripts/fpp_releasenotes.sh` exists,
+      is executable, returns quickly, and uses no `sudo` (it runs as the `fpp`
+      user while the dialog waits).
 - [ ] Hooks return quickly (long work backgrounded); daemons started in
       `postStart` are stopped in `preStop`/`postStop`.
 - [ ] Native (C++) build happens in `fpp_install.sh`, not in `preStart.sh`/

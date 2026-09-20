@@ -45,6 +45,7 @@ which points at this file.
 | `iconURL` | string | optional | Icon URL, used only when the repo has no `icon.png` (128x128 or 256x256) in its root — ship that so the icon renders offline. Must be an `https://raw.githubusercontent.com/...` URL ending in `.png`, `.jpg`, `.jpeg`, `.gif` or `.webp`; anything else is ignored. |
 | `documentation` | string | optional | URL to human documentation for this plugin. Purely informational — not read or rendered by FPP itself. |
 | `allowUpdates` | integer (`0`/`1`) | optional | Controls whether FPP offers in-place git updates for the installed plugin. When omitted it is treated as allowed. Set to `0` to hide the **Update Now** / **Check for Updates** buttons (install-once plugins). Can also be set per-version inside `versions[]` (the per-version value takes effect for that version). |
+| `releaseNotesStyle` | string (`"none"` / `"gitRelease"` / `"gitHistory"` / `"script"`) | optional | Whether, and how, the Plugin Manager offers a **Release Notes** link for the plugin (FPP 10+). Omitted or `"none"`: no link at all. `"gitRelease"`: the latest GitHub Release of the `srcURL` repo. `"gitHistory"`: the commits an update would bring in, read from the installed clone. `"script"`: whatever the plugin's own `scripts/fpp_releasenotes.sh` prints. See **Release notes** below. |
 | `minMemoryMB` | integer | optional | Minimum system RAM (MB) the plugin needs to run acceptably, across all versions. If the device has less, FPP flags it (and hides it on the Basic UI level). See **Resource hints** below. |
 | `minCpuCores` | integer | optional | Minimum recommended CPU cores, across all versions. If the device has fewer, FPP flags it (and hides it on the Basic UI level). |
 | `private` | boolean | optional | Set `true` if the plugin is hosted in a **private** GitHub repo. FPP will clone it using the GitHub username + Personal Access Token configured on the Developer settings page, and show a **Private** badge. |
@@ -230,6 +231,69 @@ there):
 
 ---
 
+## Release notes
+
+The Plugin Manager can show a plugin's release notes in-app — a **Release
+Notes** icon at the right end of the card's action row, and a **Release Notes**
+link in the plugin detail dialog next to **View Source** / **Report a Bug** —
+without sending the user off to GitHub. It is **opt-in, per plugin**, through
+the top-level `releaseNotesStyle` field: most plugins have no tagged GitHub
+Releases at all, so FPP does not guess from "is this repo on GitHub"; a plugin
+that declares nothing gets no link.
+
+Pick the one style that matches how your plugin actually ships changes:
+
+| `releaseNotesStyle` | What the dialog shows | When to use it |
+|---------------------|-----------------------|----------------|
+| omitted / `"none"` | Nothing — no icon, no link. | The default. |
+| `"gitRelease"` | The **latest GitHub Release** of the `srcURL` repo: its title, publish date and markdown body (rendered through FPP's own small, whitelisting markdown converter — headings, bold/italic, lists, links, code), plus a *View Full Release on GitHub* button. | You tag a GitHub Release with written notes for each version. Requires `srcURL` to be a `github.com` repo. If the repo has no Release published yet the dialog says so and offers a *Browse on GitHub* link instead. |
+| `"gitHistory"` | The **commits between the installed clone and `origin/<branch>`** — i.e. exactly what pressing **Update** would pull in — as a hash / message / author / date table (most recent first, capped at 50). | You don't tag releases; your commit messages are the changelog. Works for any git-hosted plugin, needs no GitHub API call, and reuses the refs FPP's own update check already fetched. Shows *No new commits* when the install is up to date. |
+| `"script"` | The **stdout of your own `scripts/fpp_releasenotes.sh`**, as plain text (HTML-escaped and line-wrapped; never interpreted as markdown or HTML). | Your update-worthy changes aren't git commits at all — e.g. a plugin that fetches a prebuilt component and reports updates through `scripts/fpp_update_check.sh` / applies them in `scripts/fpp_upgrade.sh`. See **`scripts/fpp_releasenotes.sh`** below. |
+
+FPP reads `releaseNotesStyle` from the **installed** plugin's `pluginInfo.json`
+on click (`GET /api/plugin/<repoName>/releaseNotes`), never from anything the
+browser supplies, so the field only does anything once the plugin is
+installed. An unknown value is treated as `"none"`, but the schema rejects
+anything outside the four listed values, so CI will catch a typo.
+
+### `scripts/fpp_releasenotes.sh`
+
+Only consulted when `releaseNotesStyle` is `"script"`. FPP runs it with the
+same `FPPDIR` / `SRCDIR` environment `fpp_update_check.sh` gets and shows
+its **standard output** verbatim as the release notes. Rules, same as the other
+optional update hooks:
+
+- **Runs as the web user (`fpp`), not root, synchronously while the user waits
+  on the dialog.** It must return quickly — read a bundled changelog or a cached
+  file, don't download anything, don't build anything, and don't `sleep`.
+- **No `sudo`.** There is nothing to elevate for, and a prompt would hang the
+  request.
+- **Exit `0` and print something.** A non-zero exit, or empty output, is shown
+  as *No release notes are available for this plugin right now.*
+- **Plain text only.** Output is HTML-escaped before display, so markdown or
+  HTML markup shows up literally; write for a `<pre>` block.
+- Make it executable (`chmod +x`) and keep it next to `fpp_install.sh` in
+  `scripts/`.
+
+The template ships an example `scripts/fpp_releasenotes.sh` (unused until you
+switch `releaseNotesStyle` to `"script"`) that prints a `CHANGELOG.md` or
+`CHANGELOG.txt` from the plugin root, or the recent commit log as a fallback.
+
+Example — a plugin whose commit log is its changelog:
+
+```json
+{
+    "repoName": "fpp-plugin-Example",
+    "allowUpdates": 1,
+    "releaseNotesStyle": "gitHistory",
+    "versions": [
+        { "minFPPVersion": "10.0", "maxFPPVersion": "0", "branch": "master", "sha": "" }
+    ]
+}
+```
+
+---
+
 ## `dependencies`
 
 A `dependencies` object lets a plugin declare things it needs. FPP installs them
@@ -316,7 +380,16 @@ page, or a plugin's `repoName` for a package installed as its dependency). When
 a plugin is **uninstalled**, its claim on each of its declared packages is
 dropped, and a package is only actually `apt-get remove`d once **nothing else
 still needs it** — so a package shared by two plugins, or one you also installed
-yourself, stays put. This bookkeeping lives in
+yourself, stays put. A package that was **already installed** when your plugin
+first declared it (part of the FPP image, or put there by hand) is not
+recorded at all: FPP didn't install it, so FPP never removes it. Declare
+everything your plugin needs even if it ships on the standard image — a
+manual Debian/Ubuntu install may lack it, and on an image that has it the
+declaration is a no-op. FPP also refuses any removal that would take other
+packages with it — `apt-get remove` drops every reverse dependency, so
+removing something like `fontconfig` would take ffmpeg along — and only
+accepts plain package names (`name` or `name:arch`; no `pkg-`, globs,
+`=version` or `/suite` syntax). This bookkeeping lives in
 `/home/fpp/media/config/userpackages.json`, which is also what FPP replays to
 reinstall your packages after an fppos OS upgrade.
 
@@ -573,6 +646,8 @@ These are added by FPP at install time and must **not** be authored in your
   bumped to `11.0` (or a second entry is added).
 - Add `platforms` to a version entry to restrict hardware; add more entries to
   support older FPP majors with pinned commits.
+- Add `releaseNotesStyle` (see **Release notes** above) to get a Release Notes
+  link on the card; without it none is shown.
 
 ---
 

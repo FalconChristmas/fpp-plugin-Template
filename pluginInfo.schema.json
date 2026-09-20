@@ -68,6 +68,16 @@
             ],
             "description": "0 hides in-place update buttons (install-once plugins). Omitted = allowed. Can be overridden per version."
         },
+        "releaseNotesStyle": {
+            "type": "string",
+            "enum": [
+                "none",
+                "gitRelease",
+                "gitHistory",
+                "script"
+            ],
+            "description": "How the Plugin Manager shows this plugin's release notes (FPP 10+). Omitted (or \"none\") = no Release Notes icon/link is offered at all. \"gitRelease\": the latest GitHub Release of the srcURL repo (its markdown body, rendered). \"gitHistory\": the commits between the installed clone and origin/<branch>, i.e. what an update would bring in -- no GitHub Release needed. \"script\": the stdout of the plugin's own scripts/fpp_releasenotes.sh, shown as plain text (for a plugin whose updates aren't git commits, e.g. one driving fpp_update_check.sh/fpp_upgrade.sh). FPP reads this from the INSTALLED plugin's pluginInfo.json on click, so it only takes effect once the plugin is installed."
+        },
         "minMemoryMB": {
             "type": "integer",
             "minimum": 1,
