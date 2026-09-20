@@ -376,11 +376,20 @@ They are resolved in this order — **packages → python → scripts → plugin
 
 Package dependencies are **reference-counted**. FPP tracks every requester of a
 package (the literal `"user"` for anything installed from the Package Manager
-page, or a plugin's `repoName` for a package installed as its dependency). When
-a plugin is **uninstalled**, its claim on each of its declared packages is
+page, or a plugin's `repoName` for a package installed as its dependency), and
+records not just the package you declared but every package apt pulled in to
+satisfy it, all against your plugin. When a plugin is **uninstalled** (after
+its `fpp_uninstall.sh` has run), its claim on each of those packages is
 dropped, and a package is only actually `apt-get remove`d once **nothing else
 still needs it** — so a package shared by two plugins, or one you also installed
-yourself, stays put. A package that was **already installed** when your plugin
+yourself, stays put; a dependency that something else has since come to rely
+on stays too, and only the rest of your plugin's footprint is removed. A
+plugin **upgrade** (and a reinstall) reconciles the same way: apt packages,
+Python packages and scripts the new version adds are installed before your
+upgrade script runs, and packages it no longer declares are released. A
+dependency **plugin** a new version adds is *not* installed by the upgrade —
+the operator has to see its privacy disclosure — so the update dialog names
+it and the user installs it from the Plugins page; code for it being absent. A package that was **already installed** when your plugin
 first declared it (part of the FPP image, or put there by hand) is not
 recorded at all: FPP didn't install it, so FPP never removes it. Declare
 everything your plugin needs even if it ships on the standard image — a
