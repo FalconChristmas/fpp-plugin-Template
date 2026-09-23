@@ -246,30 +246,39 @@ Pick the one style that matches how your plugin actually ships changes:
 | `releaseNotesStyle` | What the dialog shows | When to use it |
 |---------------------|-----------------------|----------------|
 | omitted / `"none"` | Nothing — no icon, no link. | The default. |
-| `"gitRelease"` | The **latest GitHub Release** of the `srcURL` repo: its title, publish date and markdown body (rendered through FPP's own small, whitelisting markdown converter — headings, bold/italic, lists, links, code), plus a *View Full Release on GitHub* button. | You tag a GitHub Release with written notes for each version. Requires `srcURL` to be a `github.com` repo. If the repo has no Release published yet the dialog says so and offers a *Browse on GitHub* link instead. |
-| `"gitHistory"` | The **commits between the installed clone and `origin/<branch>`** — i.e. exactly what pressing **Update** would pull in — as a hash / message / author / date table (most recent first, capped at 50). | You don't tag releases; your commit messages are the changelog. Works for any git-hosted plugin, needs no GitHub API call, and reuses the refs FPP's own update check already fetched. Shows *No new commits* when the install is up to date. |
+| `"gitRelease"` | The **latest GitHub Release** of the `srcURL` repo: its title, tag, publish date and markdown body (rendered through FPP's own small, whitelisting markdown converter — headings, bold/italic, lists, links, code), plus a *View Full Release on GitHub* button. | You tag a GitHub Release with written notes for each version. **GitHub only:** requires `srcURL` to be a `github.com` repo. FPP caches the release for 6 hours, and shows the last copy it fetched if GitHub can't be reached. If the repo has no Release published yet the dialog says so and offers a *Browse on GitHub* link instead. When a GitHub token is configured on the Developer settings page FPP sends it, as installs and updates do, so a private repo works too; if GitHub doesn't show the repo at all, the dialog says so rather than claiming there is no release. A `srcURL` that isn't on github.com gets no link. |
+| `"gitHistory"` | The **commits between the installed clone and `origin/<branch>`** — i.e. exactly what pressing **Update** would pull in, marked *New* — followed by the most recent installed commits, the newest marked *Installed*. A hash / message / author / date table, most recent first, merge commits left out, up to about 60 rows. | You don't tag releases; your commit messages are the changelog. Works for any git-hosted plugin, needs no GitHub API call, and reuses the refs FPP's own update check already fetched (so it is as fresh as the last update check). With no new commits it says so and still lists the recent changes. |
 | `"script"` | The **stdout of your own `scripts/fpp_releasenotes.sh`**, as plain text (HTML-escaped and line-wrapped; never interpreted as markdown or HTML). | Your update-worthy changes aren't git commits at all — e.g. a plugin that fetches a prebuilt component and reports updates through `scripts/fpp_update_check.sh` / applies them in `scripts/fpp_upgrade.sh`. See **`scripts/fpp_releasenotes.sh`** below. |
 
-FPP reads `releaseNotesStyle` from the **installed** plugin's `pluginInfo.json`
-on click (`GET /api/plugin/<repoName>/releaseNotes`), never from anything the
-browser supplies, so the field only does anything once the plugin is
-installed. An unknown value is treated as `"none"`, but the schema rejects
-anything outside the four listed values, so CI will catch a typo.
+The link is only offered for **installed** plugins. FPP reads
+`releaseNotesStyle` (and, for `"gitRelease"`, `srcURL`) from the
+`pluginInfo.json` the next update would land — `origin/<branch>` as of the
+last update check — falling back to the installed copy, never from anything
+the browser supplies. So the update that first adds the field already gets
+the link. An unknown value is treated as `"none"`, but the schema rejects
+anything outside the four listed values, so CI will catch a typo. The set of
+styles is fixed; others may be added in a later FPP, and an FPP that doesn't
+know a newer value treats it as `"none"`.
 
 ### `scripts/fpp_releasenotes.sh`
 
-Only consulted when `releaseNotesStyle` is `"script"`. FPP runs it with the
+Only consulted when `releaseNotesStyle` is `"script"`. FPP only ever runs the
+**installed** copy, never one in a pending update, so no Release Notes link is
+offered until the update that adds the script has been installed. FPP runs it with the
 same `FPPDIR` / `SRCDIR` environment `fpp_update_check.sh` gets and shows
 its **standard output** verbatim as the release notes. Rules, same as the other
 optional update hooks:
 
 - **Runs as the web user (`fpp`), not root, synchronously while the user waits
   on the dialog.** It must return quickly — read a bundled changelog or a cached
-  file, don't download anything, don't build anything, and don't `sleep`.
+  file, don't download anything, don't build anything, and don't `sleep`. FPP
+  kills it after **15 seconds** and shows an error instead. It runs in the
+  plugin's own directory, with stdin closed and stderr discarded.
 - **No `sudo`.** There is nothing to elevate for, and a prompt would hang the
   request.
-- **Exit `0` and print something.** A non-zero exit, or empty output, is shown
-  as *No release notes are available for this plugin right now.*
+- **Exit `0` and print something.** A non-zero exit is shown as an error
+  naming the exit code; empty output as *The plugin did not return any release
+  notes*. Only the first **64 KiB** of output is shown.
 - **Plain text only.** Output is HTML-escaped before display, so markdown or
   HTML markup shows up literally; write for a `<pre>` block.
 - Make it executable (`chmod +x`) and keep it next to `fpp_install.sh` in
