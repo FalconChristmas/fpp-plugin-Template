@@ -248,7 +248,7 @@ Pick the one style that matches how your plugin actually ships changes:
 | omitted / `"none"` | Nothing — no icon, no link. | The default. |
 | `"gitRelease"` | The **latest GitHub Release** of the `srcURL` repo: its title, tag, publish date and markdown body (rendered through FPP's own small, whitelisting markdown converter — headings, bold/italic, lists, links, code), plus a *View Full Release on GitHub* button. | You tag a GitHub Release with written notes for each version. **GitHub only:** requires `srcURL` to be a `github.com` repo. FPP caches the release for 6 hours, and shows the last copy it fetched if GitHub can't be reached. If the repo has no Release published yet the dialog says so and offers a *Browse on GitHub* link instead. When a GitHub token is configured on the Developer settings page FPP sends it, as installs and updates do, so a private repo works too; if GitHub doesn't show the repo at all, the dialog says so rather than claiming there is no release. A `srcURL` that isn't on github.com gets no link. |
 | `"gitHistory"` | The **commits between the installed clone and `origin/<branch>`** — i.e. exactly what pressing **Update** would pull in, marked *New* — followed by the most recent installed commits, the newest marked *Installed*. A hash / message / author / date table, most recent first, merge commits left out, up to about 60 rows. | You don't tag releases; your commit messages are the changelog. Works for any git-hosted plugin, needs no GitHub API call, and reuses the refs FPP's own update check already fetched (so it is as fresh as the last update check). With no new commits it says so and still lists the recent changes. |
-| `"script"` | The **stdout of your own `scripts/fpp_releasenotes.sh`**, as plain text (HTML-escaped and line-wrapped; never interpreted as markdown or HTML). | Your update-worthy changes aren't git commits at all — e.g. a plugin that fetches a prebuilt component and reports updates through `scripts/fpp_update_check.sh` / applies them in `scripts/fpp_upgrade.sh`. See **`scripts/fpp_releasenotes.sh`** below. |
+| `"script"` | The **stdout of your own `scripts/fpp_releasenotes.sh`**, as plain text (HTML-escaped and line-wrapped; never interpreted as markdown or HTML). | Your update-worthy changes aren't git commits at all — e.g. a plugin that fetches a prebuilt component and reports updates through `scripts/fpp_update_check.sh` / applies them in `scripts/fpp_upgrade.sh`. See **`scripts/fpp_releasenotes.sh`** below, and **Updates that aren't git commits** for the other two scripts. |
 
 The link is only offered for **installed** plugins. FPP reads
 `releaseNotesStyle` (and, for `"gitRelease"`, `srcURL`) from the
@@ -300,6 +300,93 @@ Example — a plugin whose commit log is its changelog:
     ]
 }
 ```
+
+---
+
+## Updates that aren't git commits
+
+FPP decides whether a plugin has an update by fetching its clone and comparing
+the checked-out branch with `origin/<branch>`. That is all most plugins need.
+A plugin whose real updates live **outside git** — a prebuilt binary or
+package attached to a GitHub Release (often a rolling one), a component
+downloaded at install time — changes its repo rarely or never, so git sees
+nothing to update. Three optional scripts in `scripts/` cover that case, and
+such a plugin usually ships all three:
+
+| Script | What it does | Runs as |
+|--------|--------------|---------|
+| `fpp_update_check.sh` | Tells FPP whether an update is available. See below. | web user (`fpp`) |
+| `fpp_upgrade.sh` | Applies a plugin-only update, *instead of* re-running `fpp_install.sh` (see `PLUGIN_SELF_REVIEW.md`). | root |
+| `fpp_releasenotes.sh` | Prints the release notes, with `"releaseNotesStyle": "script"`. See **`scripts/fpp_releasenotes.sh`** above. | web user (`fpp`) |
+
+If your updates **are** git commits, you need none of them; delete the
+template's `scripts/fpp_update_check.sh`.
+
+### `scripts/fpp_update_check.sh`
+
+When it exists (and is executable), FPP runs it every time it checks the
+plugin for updates, right after the `git fetch`:
+
+- the background check FPP starts when someone opens the web UI and the last
+  answer is a few hours old (one plugin at a time, at low priority);
+- **Check for Updates** and **Update All** on the Plugins page, and the
+  **Check for Update** button in a plugin's detail dialog;
+- once after an install (after `fpp_install.sh`) and once after an update.
+
+For a plugin installed without a clone (from an archive) there is no git
+check at all, and this script's answer is the whole answer.
+
+Rules:
+
+- **Check, never update.** The script must not download and install anything,
+  replace code or binaries, or otherwise change the plugin. It runs
+  unattended and over and over — from the background check at `nice 19`,
+  possibly in the middle of a show — and outside the privacy review an
+  **Update** goes through. Anything that changes the plugin belongs in
+  `scripts/fpp_upgrade.sh`, which runs only when the user presses **Update**.
+  A small side effect that changes no code, such as caching the new release's
+  notes text for `fpp_releasenotes.sh` to print, is fine.
+- **Runs as the web user (`fpp`), not root, in the plugin's own directory.**
+  No `sudo`. Anything it reads — a version file your install script wrote as
+  root, say — must be readable by that user.
+- **A minimal environment, not the web server's:** `FPPDIR`, `SRCDIR`
+  (`$FPPDIR/src`), `PATH`, `HOME`, `USER`, `LANG` and `LC_ALL`, nothing else.
+  stdin is `/dev/null` and stderr is discarded.
+- **The last non-empty line of stdout is the answer:** `1` if an update is
+  available, `0` if not. Earlier lines are ignored, so a one-line explanation
+  before it is fine (only the last 8 KB of output is kept). Print exactly `1`
+  or `0`; any other last line counts as "no update".
+- **Exit `0` when the check ran; exit non-zero when it couldn't.** A non-zero
+  exit means "could not check", and FPP never takes it as the script saying
+  "up to date": the plugin keeps whatever git concluded, and the reason ("the
+  plugin's own update check did not run (it exited 1)") is recorded with the
+  verdict. Where git has no answer either (an archive install, a detached
+  HEAD) the plugin shows as *not checked*, with that reason on the Updates
+  tab. So when you can't tell (no network, GitHub refused, nothing to
+  compare), exit non-zero rather than guess `0` — and never print `1` on a
+  failure, or every offline box shows a phantom update.
+- **Two minutes at most.** That is a bound on a hung script, not a budget:
+  FPP runs it under `timeout` and after two minutes kills its whole process
+  group, and the check counts as *not checked* ("it did not finish in 120
+  seconds"). A normal check should take a second or two — someone may be
+  waiting on the **Check for Update** button, and the background check does
+  the plugins one after another. Give every network call a timeout
+  (`curl --max-time 20`) so a dead server can't hang it.
+- **It is OR'd with git.** If git already sees new commits, the script isn't
+  run. A `1` marks an update even when git sees none; a `0` never hides
+  commits git has seen.
+- **Privacy:** an update check that only talks to GitHub (`api.github.com`,
+  `github.com`, `raw.githubusercontent.com`) needs no `sends` entry in the
+  `privacy` block — FPP's plugin manager makes that traffic already. A check
+  against any other host is a `sends` entry like any other.
+- Make it executable (`chmod +x`) and keep it next to `fpp_install.sh` in
+  `scripts/`.
+
+The template ships an example `scripts/fpp_update_check.sh`: it compares a
+`.installed-version` file (the release tag your install script downloaded)
+with the tag of the latest GitHub Release of the `srcURL` repo, prints `1` or
+`0`, and exits `1` if either can't be read. Copy it, or delete it if git
+already carries your updates.
 
 ---
 

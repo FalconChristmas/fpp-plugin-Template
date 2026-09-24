@@ -320,7 +320,14 @@ required:
   `FPPDIR`/`SRCDIR` set; the **last line of stdout** must be `1` (update
   available) or `0` (none). Its answer is OR'd with FPP's own
   `git log HEAD..origin/<branch>` check, so ordinary commits are still seen.
-  A non-zero exit means "couldn't check" and is ignored.
+  A non-zero exit means "couldn't check": git's answer stands, and with no
+  git answer either the plugin shows as not checked, never as up to date. Runs as the web user (`fpp`), not root, with
+  a two-minute limit (a bound on a hung script). It must only **check**:
+  never download, install or replace anything — that is `fpp_upgrade.sh`'s
+  job, when the user presses **Update**. `PLUGININFO_FORMAT.md` › *Updates
+  that aren't git commits* has the full contract; the template's
+  `scripts/fpp_update_check.sh` is a working example (delete it if your
+  updates are git commits).
 - **`fpp_releasenotes.sh`** — the body of the **Release Notes** dialog when
   `pluginInfo.json` declares `"releaseNotesStyle": "script"` (the other two
   styles, `gitRelease` and `gitHistory`, need no script at all — see
@@ -1074,6 +1081,11 @@ identifiers (hashing phone numbers) where the feature allows.
 - [ ] If `releaseNotesStyle` is `"script"`, `scripts/fpp_releasenotes.sh` exists,
       is executable, returns quickly, and uses no `sudo` (it runs as the `fpp`
       user while the dialog waits).
+- [ ] If you ship `scripts/fpp_update_check.sh`, it is executable, only
+      checks (changes nothing in the plugin), finishes in a few seconds (FPP
+      kills it at two minutes), prints `1` or `0` as its last line, and exits
+      non-zero (never printing `1`) when it can't tell. If your updates are
+      git commits, you deleted the template's copy.
 - [ ] Hooks return quickly (long work backgrounded); daemons started in
       `postStart` are stopped in `preStop`/`postStop`.
 - [ ] Native (C++) build happens in `fpp_install.sh`, not in `preStart.sh`/

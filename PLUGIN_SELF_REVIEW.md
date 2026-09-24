@@ -128,6 +128,9 @@ the user.
 also needs — build a native `.so`, create a directory — must be in both, or
 `fpp_upgrade.sh` must call `fpp_install.sh`. If you have no `fpp_upgrade.sh`,
 updates fall back to `fpp_install.sh` and you're already covered.
+If those updates aren't git commits (a prebuilt release binary, say), FPP
+won't see them without a `scripts/fpp_update_check.sh` to report them — see
+`PLUGININFO_FORMAT.md` › *Updates that aren't git commits*.
 
 **You usually don't need to set `restartFlag`.** On FPP 10 the install asks
 fppd to load your plugin, and the uninstall asks it to unload, so neither
