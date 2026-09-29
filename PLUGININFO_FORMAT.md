@@ -515,10 +515,10 @@ after the dependencies are in place.
 
 The `privacy` object is the plugin's own description, in plain language, of
 what it does with data and with the device. FPP reads it **before install** to
-build the confirmation dialog — a one-line headline and six lights (Sends
-data, Collects data, Camera & mic, Remote access, System changes, Can it be
-checked?), each green, amber or red — and shows the same strip on the
-installed-plugins list. The colours and every sentence in the dialog are
+build the confirmation dialog — six lights (Sends data, Collects data,
+Camera & mic, Remote access, System changes, Can it be checked?), each green,
+amber or red, with a one-line headline when nothing is disclosed — and shows
+the same strip as dots on the plugin cards. The colours and every sentence in the dialog are
 FPP's, computed from the block; you never choose a colour and your text is
 only ever inserted as fragments. The table of what earns each colour, and the
 wording FPP uses for it, is in `PLUGIN_GUIDELINES.md` §14.15; the rules the
@@ -594,11 +594,13 @@ places rather than trusting it for anything security-critical:
    to look and what to delete. It is not read by the crash bundler (which
    copies `config/` through its own name-based redactor, and never
    `plugindata/`) nor by the JSON backup, which redacts nothing by design.
-2. **The install dialog and the lights.** The headline, the six lights, the
-   line under each light and the label on the Install button are all
-   computed from the block (rules and wording in `PLUGIN_GUIDELINES.md`
-   §14.15). Above it, on every community install, FPP shows its own fixed
-   warning that the plugin is untrusted third-party code running as root.
+2. **The install dialog and the lights.** The headline, the six lights and
+   the line for each light (its tooltip, and listed under **Full
+   disclosure**) are all computed from the block (rules and wording in
+   `PLUGIN_GUIDELINES.md` §14.15). The Install button does not depend on
+   them. Separately, before a player's first plugin install, FPP shows its
+   own one-time notice that plugins are not part of FPP, are not reviewed
+   by the FPP project, and run with full access to the player.
 3. **Upgrades.** The stored block is diffed against the new one over
    everything except `summary` — that is `sends`, `collects`, `sensors`,
    `remoteAccess`, `systemChanges`, `closedCode` and `other` — and a change
@@ -609,9 +611,9 @@ places rather than trusting it for anything security-critical:
 4. **No block.** A plugin with no `privacy` block cannot be listed or
    updated: the listing check's `privacy-missing` finding is a blocker. In
    FPP itself an unlisted or already-installed plugin without one shows
-   "Not disclosed" lights, a "No privacy disclosure" headline and an
-   "Install, no disclosure" button (grey until FPP's own 1 January 2027
-   date in `fpp-privacy-lights.js`, red after).
+   "Not disclosed" lights and a "No privacy disclosure" headline (grey
+   until FPP's own 1 January 2027 date in `fpp-privacy-lights.js`, red
+   after).
 
 ### Writing it for a neighbour
 
@@ -699,8 +701,8 @@ That plugin shows amber on **Sends data** ("Sends when enabled" — the send is
 to a hostname but only when the feature is on, and names no hardware
 identifier), amber on **Collects data** ("Collects, with limits" — visitor
 data, but with a retention limit and a delete control), and green elsewhere;
-the headline is "Author says it talks to online services" and the button
-"Install anyway". Setting `keptDays` to `null` would turn Collects data red
+the card's tooltip headline is "Author says it talks to online services".
+Setting `keptDays` to `null` would turn Collects data red
 ("Collects visitor data") and the headline to "Handles other people's data".
 
 ---

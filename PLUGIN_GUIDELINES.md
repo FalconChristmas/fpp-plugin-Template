@@ -845,8 +845,11 @@ FPP computes six lights from your `privacy` block — you never pick a colour,
 and every sentence in the dialog is FPP's, with your text inserted only as
 fragments (`to`, `what`, `why`, `where`, `systemChanges[].what`, `summary`,
 `other`). The same six lights appear as dots on the Plugins page cards and in
-full in a plugin's detail modal. Red lines are always shown in the dialog;
-amber and green open on tap.
+full in a plugin's detail modal. Each light is a neutral pill with a coloured
+dot: the colours inform, and FPP does not present them as warnings. The line
+under each light (below) is the light's tooltip, and all six lines are listed,
+with your `other` text, under a collapsed **Full disclosure**; tapping a light
+opens it at that line.
 The lights are named **Sends data · Collects data · Camera & mic · Remote
 access · System changes · Can it be checked?**
 
@@ -854,8 +857,8 @@ You don't need an FPP box to see the result: the
 [Plugin preview](https://falconchristmas.github.io/fpp-data/plugin_preview/?repo=owner/repo)
 renders the card and the install dialog from your `pluginInfo.json` with the
 same script FPP runs (`www/js/fpp-privacy-lights.js`, loaded from the FPP
-repo), so the colours, summary, chip lines and button label below are
-exactly what it shows (the headline appears on the card's tooltip, and in
+repo), so the colours, summary and chip lines below are exactly what it
+shows (the headline appears on the card's tooltip, and in
 the dialog only when nothing is disclosed). Paste the JSON if the file isn't pushed yet.
 
 **What earns each colour.** Red rules are tested before amber; the first match
@@ -944,40 +947,25 @@ finding — "Sends identifying data", "Records people". A favourable one is only
 a claim, so every green line and headline is attributed to you — "No sending
 disclosed", "Author says…" — the label line above the headline reads "DISCLOSED
 BY THE AUTHOR · not verified by FPP", and the card shows green as a hollow dot
-rather than a filled one. Every community-plugin dialog also carries FPP's own
-warning that no block changes — untrusted third-party code that will run as
-root, able to read and change any setting including the privacy settings and
-reach anything on the network, inherently dangerous, not tested, vetted or
-guaranteed by the FPP project, install only if you trust the author — so a
-row of six greens is a description of *your* plugin as you describe it, not a
-badge. The listing check (14.16) is the one place your block is compared with
+rather than a filled one. What no block changes is said once per player,
+before its first plugin install (and again after each FPP major upgrade):
+plugins are not part of FPP, are not reviewed by the FPP project, and run
+with full access to the player — so a row of six greens is a description of
+*your* plugin as you describe it, not a badge. The listing check (14.16) is the one place your block is compared with
 your code.
 
-**The Install button** takes its text and colour from the worst finding, in
-the same order as the headline. It always starts with "Install"; Cancel stays
-"Cancel".
-
-| Worst finding | Button | Class |
-|---|---|---|
-| No disclosure | Install, no disclosure | btn-danger |
-| Open code red | Install, black box included | btn-danger |
-| Collects/Camera red | Install, handles others' data | btn-danger |
-| Remote red | Install, opens FPP to internet | btn-danger |
-| Sends red | Install, sends data out | btn-danger |
-| System red | Install, permanent changes | btn-danger |
-| Any amber, any send, or a light grey for a missing key | Install anyway | btn-warning |
-| All green | Install | btn-success |
-| Official, all green | Install | btn-success |
-
-FPP's existing developer-mode and resource warnings still force "Install
-anyway" (btn-warning at least) when they fire and the finding-based label
-would be plainer.
+**The Install button** does not depend on the lights: it reads "Install".
+It changes to "Install anyway" only for FPP's own checks — a version not
+updated for the running FPP, a device under your declared `minMemoryMB` /
+`minCpuCores`, or a plugin loaded from a pasted `pluginInfo.json` URL.
+(FPP 10.1 labels the button after the worst light instead, e.g. "Install,
+black box included"; later versions do not.)
 
 **Plugins with no block.** Every listed plugin must carry a `privacy` block:
 the listing check's `privacy-missing` finding is a blocker for new listings
 and for updates to listed plugins. Saying nothing is never better than
-describing honestly: an undeclared plugin gets the red "Install, no
-disclosure" button.
+describing honestly: an undeclared plugin shows six "not disclosed" lights
+and a "No privacy disclosure" headline.
 
 FPP's own install dialog (for a plugin installed outside the listing, or one
 installed before it carried a block) keys its rendering to the constant
@@ -989,7 +977,6 @@ against the player's own date:
 | Lights | grey, "Not disclosed", hollow dots | red, "Not disclosed" |
 | Headline | grey "No privacy disclosure" | red **"No privacy disclosure"** with the explainer *"Every FPP plugin has been required to describe what it does with data since 1 January 2027. This one has not."* |
 | Label line | "NO DISCLOSURE · the author has not said what this plugin does with data" | same |
-| Button | "Install, no disclosure", danger | same |
 
 **Upgrades.** FPP diffs the stored block against the new one over everything
 except `summary` (`other` included), and re-shows the dialog ("This update changes
