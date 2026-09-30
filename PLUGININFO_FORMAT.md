@@ -611,9 +611,8 @@ places rather than trusting it for anything security-critical:
 4. **No block.** A plugin with no `privacy` block cannot be listed or
    updated: the listing check's `privacy-missing` finding is a blocker. In
    FPP itself an unlisted or already-installed plugin without one shows
-   "Not disclosed" lights and a "No privacy disclosure" headline (grey
-   until FPP's own 1 January 2027 date in `fpp-privacy-lights.js`, red
-   after).
+   red "Not disclosed" lights, a red "No privacy disclosure" warning and
+   an "Install anyway" button.
 
 ### Writing it for a neighbour
 

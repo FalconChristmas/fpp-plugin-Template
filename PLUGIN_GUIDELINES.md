@@ -895,7 +895,7 @@ serial, write "serial number").
 | Remote access | No remote access disclosed | Listens on your network · Reachable from the internet, with a login (per value; an unknown value reads Listens for connections) | Can be reached from the internet |
 | System changes | No system changes disclosed | Changes this device | Changes this device permanently · Reads FPP's credentials · Grants extra privileges (per rule) |
 | Open code | Author says all its software can be checked | Downloads extra software | Includes software that can't be checked |
-| No disclosure (any) | — | — | "<light name>: not disclosed" (grey when only that key is missing) |
+| No disclosure (any) | — | — | "<light name>: not disclosed" (red when there is no block at all; grey when only that key is missing) |
 
 Under each light FPP composes one line from a fixed template with your
 fragments inserted — for a send, `<to> · always on` or `· only when you use
@@ -957,26 +957,26 @@ your code.
 **The Install button** does not depend on the lights: it reads "Install".
 It changes to "Install anyway" only for FPP's own checks — a version not
 updated for the running FPP, a device under your declared `minMemoryMB` /
-`minCpuCores`, or a plugin loaded from a pasted `pluginInfo.json` URL.
+`minCpuCores`, a plugin loaded from a pasted `pluginInfo.json` URL, or a
+plugin (or a dependency it brings in) with no `privacy` block at all.
 (FPP 10.1 labels the button after the worst light instead, e.g. "Install,
 black box included"; later versions do not.)
 
 **Plugins with no block.** Every listed plugin must carry a `privacy` block:
 the listing check's `privacy-missing` finding is a blocker for new listings
 and for updates to listed plugins. Saying nothing is never better than
-describing honestly: an undeclared plugin shows six "not disclosed" lights
-and a "No privacy disclosure" headline.
+describing honestly: it is the one privacy finding FPP's install dialog
+presents as a warning. For a plugin with no block (one installed outside
+the listing, or before it carried a block) FPP shows:
 
-FPP's own install dialog (for a plugin installed outside the listing, or one
-installed before it carried a block) keys its rendering to the constant
-`PRIVACY_DECLARATION_REQUIRED_FROM` in `fpp-privacy-lights.js`, compared
-against the player's own date:
+| | |
+|---|---|
+| Lights | all six red, "<light name>: not disclosed" |
+| In place of the label line | a red warning: **"No privacy disclosure."** *"The author has not said what this plugin sends, collects or changes on this device, so nothing is known about what it does."* |
+| Install button | "Install anyway" |
 
-| | Before 1 January 2027 | On or after |
-|---|---|---|
-| Lights | grey, "Not disclosed", hollow dots | red, "Not disclosed" |
-| Headline | grey "No privacy disclosure" | red **"No privacy disclosure"** with the explainer *"Every FPP plugin has been required to describe what it does with data since 1 January 2027. This one has not."* |
-| Label line | "NO DISCLOSURE · the author has not said what this plugin does with data" | same |
+A block that leaves out only some keys is still a disclosure: those lights
+are grey and the rest are coloured as usual.
 
 **Upgrades.** FPP diffs the stored block against the new one over everything
 except `summary` (`other` included), and re-shows the dialog ("This update changes
