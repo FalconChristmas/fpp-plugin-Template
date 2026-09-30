@@ -894,7 +894,7 @@ serial, write "serial number").
 | Camera & mic | No camera or mic disclosed | Camera, not stored · Sensor readings kept · Uses a sensor, not stored (per rule) | Records people |
 | Remote access | No remote access disclosed | Listens on your network · Reachable from the internet, with a login (per value; an unknown value reads Listens for connections) | Can be reached from the internet |
 | System changes | No system changes disclosed | Changes this device | Changes this device permanently · Reads FPP's credentials · Grants extra privileges (per rule) |
-| Open code | Author says all its software can be checked | Downloads extra software | Includes software that can't be checked |
+| Open code | Author says all its software can be checked | Downloads extra software | Includes closed-source software |
 | No disclosure (any) | — | — | "<light name>: not disclosed" (red when there is no block at all; grey when only that key is missing) |
 
 Under each light FPP composes one line from a fixed template with your
@@ -906,7 +906,7 @@ sensor, `Camera · nothing kept` (the type in words, never the enum value);
 for a system change, `Service: <what>.` (kind labels: Service ·
 Network · FPP settings · Download · Package source · Tunnel · Reads FPP
 credentials · Privilege); for remote access, a fixed sentence per value; for
-Open code, "Includes software whose source is not available." when
+Open code, "Includes software whose source code is not public." when
 `closedCode` is true and, when any `download` change exists, FPP's own
 sentence *"Installs extra software from a public source; see System
 changes."* -- the download itself is listed once, under System changes, not
@@ -919,13 +919,14 @@ package source such as apt, pip or npm."
 
 **The headline** above the strip is chosen by rule, first match wins:
 
-1. Open code red → **"Part of this plugin is a black box"**, with the fixed
-   explainer *"Almost every FPP plugin is made entirely of code anyone can
-   read. Part of this one is not, so nobody — not FPP, not you — can check
-   what that part does, and the disclosure below cannot be checked for it
-   either."* A closed component does not just earn its own red light; it
-   undermines every other line, because the listing check cannot compare
-   your block with code it cannot read.
+1. Open code red → **"Includes closed-source software"**, with the fixed
+   explainer *"Part of this plugin is not published as source code, so what
+   that part does cannot be read, and the plugin list's automated check
+   cannot compare the disclosure with it."* It heads the list because it
+   bears on every other line: the listing check cannot compare your block
+   with code it cannot read. Closed source is not a fault — it is disclosed
+   so the operator knows it is there — and it does not change the Install
+   button.
 2. Collects data or Camera & mic red → "Handles other people's data".
 3. Remote access red → "Can be reached from the internet".
 4. Sends data red → the Sends chip text ("Sends to the internet on its own",
@@ -941,18 +942,24 @@ package source such as apt, pip or npm."
 9. Otherwise → "Author says it runs on this device only".
 
 **Why the greens are worded differently from the reds.** The block is your
-own description and FPP does not verify it. A statement against your interest
+own description. The listing check (14.16) compares it with your code, but
+that check is automated and cannot see inside closed components, so it is
+not proof. A statement against your interest
 (an amber or red line) is credible on its face, so the dialog states it as a
 finding — "Sends identifying data", "Records people". A favourable one is only
 a claim, so every green line and headline is attributed to you — "No sending
-disclosed", "Author says…" — the label line above the headline reads "DISCLOSED
-BY THE AUTHOR · not verified by FPP", and the card shows green as a hollow dot
+disclosed", "Author says…" — the label line above the strip reads "DISCLOSED
+BY THE AUTHOR · checked automatically against its code for the plugin list"
+("· loaded from a URL, so not checked for the plugin list" for a plugin
+loaded from a pasted URL), and the card shows green as a hollow dot
 rather than a filled one. What no block changes is said once per player,
 before its first plugin install (and again after each FPP major upgrade):
-plugins are not part of FPP, are not reviewed by the FPP project, and run
-with full access to the player — so a row of six greens is a description of
-*your* plugin as you describe it, not a badge. The listing check (14.16) is the one place your block is compared with
-your code.
+plugins in the list are checked against these guidelines when listed and
+before each major FPP release, but are maintained by their own authors, are
+not audited by the FPP project, and run with full access to the player — so
+a row of six greens is a description of *your* plugin as you describe it,
+not a badge. The listing check (14.16) is the one place your block is
+compared with your code.
 
 **The Install button** does not depend on the lights: it reads "Install".
 It changes to "Install anyway" only for FPP's own checks — a version not
