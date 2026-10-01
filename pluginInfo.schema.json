@@ -47,7 +47,7 @@
             "type": "string",
             "format": "uri",
             "pattern": "^https://(www\\.)?github\\.com/",
-            "description": "Git clone URL (normally ending in .git). FPP clones this to install. Must be a github.com repo -- that's the only source FPP plugins support, and this is the trust anchor for the Official badge."
+            "description": "Git clone URL (normally ending in .git). FPP clones this to install. Must be a github.com repo -- that's the only source FPP plugins support, and this is the trust anchor for the Official badge. It must be the repo whose pluginInfo.json is listed; a rename or transfer blocks the listing check until srcURL (and the listing URL) are updated."
         },
         "bugURL": {
             "type": "string",
@@ -314,7 +314,7 @@
                 "to": {
                     "type": "string",
                     "minLength": 1,
-                    "description": "A hostname (\"api.twilio.com\"; a bare domain covers its subdomains); or a phrase for an operator-entered address (\"your MQTT broker\", \"the FPP players you list\"); or a broadcast (\"anyone in FM range\"). Starts with \"http://\" when the connection is unencrypted. GitHub hosts (github.com, api.github.com, raw.githubusercontent.com, *.github.io) are never listed here: fetching code, releases, update checks or a package from GitHub is traffic FPP's plugin manager already makes; a downloaded program is a systemChanges entry of kind download."
+                    "description": "A hostname (\"api.twilio.com\"; a bare domain covers its subdomains); or a phrase for an operator-entered address (\"your MQTT broker\", \"the FPP players you list\"); or a broadcast (\"anyone in FM range\"). Starts with \"http://\" when the connection is unencrypted. GitHub's own hosts (github.com, raw.githubusercontent.com, api.github.com, *.github.io and similar) are not listed here for reading: fetching code, releases, update checks or a package from GitHub is traffic FPP's plugin manager already makes; a downloaded program is a systemChanges entry of kind download. Writing to GitHub is sending: a plugin that creates a gist, an issue or a comment, or uploads a file, lists `api.github.com` (or `uploads.github.com`) like any other host."
                 },
                 "what": {
                     "type": "string",
@@ -430,7 +430,7 @@
                 "what": {
                     "type": "string",
                     "minLength": 1,
-                    "description": "One line: \"enables smbd\", \"adds fpp to the video group\", \"downloads the Piper voice models from huggingface.co\". Name the host of a download or package source so the listing check can match it. 1-120 characters (the listing check warns over 120)."
+                    "description": "One line: \"enables smbd\", \"adds fpp to the video group\", \"downloads the Piper voice models from huggingface.co\". Name the host of a download or package source so the listing check can match it. 1-150 characters (the listing check warns over 150)."
                 }
             }
         }

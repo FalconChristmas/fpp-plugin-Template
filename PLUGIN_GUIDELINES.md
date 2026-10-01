@@ -799,11 +799,17 @@ databases included. Non-sensitive settings may stay in `config/plugin.<repoName>
 device go under `<mediadir>/plugindata/<repoName>/`, mode `0600`.
 
 14.12 **Traffic through FPP's own helpers is the plugin's traffic.** Publishing
-on FPP's MQTT connection, fetching through `CurlManager` or `urlGet`, or
-registering HTTP routes with `registerPluginApi()` counts as sending or
-listening and must be disclosed and described in the `privacy` block exactly
-as if the plugin opened the socket itself. "My source contains no network call" is not a defence
-when every message goes out via core.
+on FPP's MQTT connection or fetching through `CurlManager` or `urlGet` counts
+as sending and must be disclosed in the `privacy` block exactly as if the
+plugin opened the socket itself. "My source contains no network call" is not a defence
+when every message goes out via core. HTTP routes registered with
+`registerPluginApi()` (or served from `api.php`) are the exception on the
+listening side: they are reached exactly as FPP's own pages are, so they are
+`remoteAccess: none`, and they are disclosed by what they do — data a route
+hands back is `collects`/`sends`, a change it makes is `systemChanges`.
+Anyone who can reach FPP can call them without a password (14.10), so a route
+that acts on someone's behalf — sends a message, spends credit, moves hardware,
+opens or unlocks something — must also be named in `other`.
 
 14.13 **In-process plugins gate themselves.** A native (shared-library) plugin
 is loaded at boot and is active whenever `fppd` runs, regardless of any
@@ -1023,19 +1029,24 @@ The compliance CI uses three tiers.
   FPP's own files or settings with no `core-settings` change),
   `privacy-undeclared-credentials` (a read of a core credential with no
   `reads-core-credentials` change), `privacy-undeclared-privileges` (sudoers,
-  group membership, kernel module or udev rule with no `privilege` change).
+  group membership, kernel module or udev rule with no `privilege` change),
+  `privacy-undeclared-closedcode` (a committed compiled file — an ELF, Mach-O,
+  PE or wasm executable or library, or a `.pyc`, `.pyo` or `.class` — with
+  no source for it in the repository, while `closedCode` is `false`; a
+  packaged library is `privacy-closedcode-unverified` instead).
 - `privacy-setting-write` — any write to the eight privacy settings (14.9).
 - `privacy-setting-read` (best practice) — reading one of them to decide
   whether the plugin may send: FPP's consent settings are the operator's
   answer to FPP, not to the plugin; gate your own traffic on your own
   setting, off by default.
 - 14.2, 14.4, 14.5's retention limit and delete control, 14.10, 14.12, 14.13,
-  and every point of 14.14.
+  and every point of 14.14. 14.12's rule that a route acting on someone's
+  behalf is named in `other` is checked by the reviewer, not the linter.
 
 **Best practice** (flagged, fix expected):
 
 - `privacy-text-length` — `summary` over 200 characters, or a `what`/`why`
-  over 100 (`systemChanges[].what` over 120). Never blocks.
+  over 100 (`systemChanges[].what` over 150). Never blocks.
 - `privacy-csp-blocked-load` — a page loads a script, stylesheet, font,
   image, frame, media file or `fetch()` URL from a host FPP's
   Content-Security-Policy blocks (nothing in the plugin adds it with
@@ -1046,9 +1057,10 @@ The compliance CI uses three tiers.
   already names the host — that entry then describes traffic that does not
   happen.
 - `privacy-closedcode-unverified` — `closedCode` is `false` but the install
-  script or code takes a package from pip, npm, CPAN or similar, or fetches a
+  script or code takes a package from pip, npm, CPAN or similar, fetches a
   binary or archive with `curl`/`wget` (`apt-get` and `dpkg` installs are not
-  counted; a `.deb` fetched by URL is). The
+  counted; a `.deb` fetched by URL is), or the repository commits a packaged
+  library (`.whl`, `.egg`, `.jar`, `.war` or `.aar`) with no source for it. The
   check cannot tell a published-source package from a closed wheel or vendor
   SDK, so it names each package page or URL for the reviewer to check; it
   is reported on every run and does not block listing. Never fires with
