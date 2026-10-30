@@ -15,3 +15,13 @@
 . ${FPPDIR}/scripts/common
 setSetting restartFlag 1
 
+
+# From FPP 10.4, Reinstall (and Reinstall All) runs this with
+# FPP_PLUGIN_REINSTALL=1 before installing again; every other uninstall has 0,
+# and FPP 10.3 and earlier set nothing.
+# State to keep across a Reinstall lives outside the plugin directory
+# (PLUGIN_GUIDELINES.md 2.12):
+# if [ "${FPP_PLUGIN_REINSTALL:-0}" != "1" ]; then
+#     rm -rf "${MEDIADIR}/plugindata/fpp-plugin-Template"
+#     rm -f "${MEDIADIR}/config/plugin.fpp-plugin-Template"
+# fi

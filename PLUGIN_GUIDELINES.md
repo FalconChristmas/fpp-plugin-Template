@@ -350,6 +350,31 @@ required:
   in it shows up literally. The template's `scripts/fpp_releasenotes.sh` is a
   working example.
 
+2.12 **Keeping state across a Reinstall (FPP 10.4 and later).** **Reinstall**
+(one plugin, or **Reinstall All Plugins**, which FPP also offers after an
+FPPOS upgrade) is an uninstall followed by an install. From FPP 10.4, during
+its uninstall half `fpp_uninstall.sh` runs with `FPP_PLUGIN_REINSTALL=1`; on
+every other uninstall it is `0`, and FPP 10.3 and earlier leave it unset, so
+a Reinstall there still removes everything.
+To keep a login, a pairing or a downloaded model across a Reinstall, delete it
+unless the value is exactly `1`. Never key the delete on `= "0"`: unset means
+a real uninstall.
+
+```bash
+. ${FPPDIR}/scripts/common    # sets MEDIADIR; sudo passes only FPPDIR/SRCDIR
+if [ "${FPP_PLUGIN_REINSTALL:-0}" != "1" ]; then
+    rm -rf "${MEDIADIR}/plugindata/<repoName>"
+    rm -f "${MEDIADIR}/config/plugin.<repoName>"
+fi
+```
+
+- **Only state outside the plugin directory survives.** FPP deletes the
+  plugin directory right after `fpp_uninstall.sh`, whatever the value. Keep
+  settings in `config/plugin.<repoName>` and credentials in
+  `plugindata/<repoName>/` (§14.11); FPP itself never deletes either.
+- **`fpp_install.sh` gets no flag.** It finds kept state by looking for it,
+  as it must anyway (§2.3).
+
 ### 3. Talk to FPP through its interfaces, not its internals
 
 Use FPP's stable, documented surfaces; don't reach into its files or process
@@ -1146,6 +1171,10 @@ identifiers (hashing phone numbers) where the feature allows.
 - [ ] `fpp_uninstall.sh` removes every service / timer / cron entry / symlink /
       out-of-tree file the plugin created, and is safe to run twice.
 - [ ] `fpp_install.sh` is safe to re-run (via Reinstall All) without side effects.
+- [ ] If state should survive a Reinstall (FPP 10.4+), `fpp_uninstall.sh` keeps
+      it only when `FPP_PLUGIN_REINSTALL` is exactly `1`, and it lives in
+      `config/plugin.<repoName>` or `plugindata/<repoName>/`, not in the
+      plugin directory (§2.12).
 - [ ] If `releaseNotesStyle` is `"script"`, `scripts/fpp_releasenotes.sh` exists,
       is executable, returns quickly, and uses no `sudo` (it runs as the `fpp`
       user while the dialog waits).
