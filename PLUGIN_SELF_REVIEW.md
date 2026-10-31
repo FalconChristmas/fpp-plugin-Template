@@ -304,7 +304,10 @@ Skip this section unless you ship compiled code.
   `unregisterPluginApi()`**, never `drogon::app().registerHandler()` directly.
   FPP deletes your plugin object on unload but Drogon keeps a directly-
   registered route, so the next request into it calls freed memory. (The
-  automated check now flags a direct `registerHandler`.)
+  automated check now flags a direct `registerHandler`.) WebSockets likewise
+  go through `FPPPlugins::registerPluginWebSocket()` /
+  `unregisterPluginWebSocket()` (FPP 10.4+), never a `WebSocketController` of
+  your own.
 - **If you claim `FPP_PLUGIN_SUPPORTS_UNLOAD()`:** your `Makefile` must
   `include $(SRCDIR)/makefiles/common/setup.mk` (that's where the
   `-fno-gnu-unique` flag lives — without it the `.so` reports a clean unload
@@ -330,7 +333,10 @@ Skip this section unless you ship compiled code.
 
   (The route path is whatever string you passed to `registerPluginApi()` —
   there's no `<repoName>` segment. The 410 only applies to routes registered
-  that way, not to a raw drogon handler.)
+  that way, not to a raw drogon handler. A WebSocket registered with
+  `registerPluginWebSocket()` behaves the same: unloading closes its open
+  connections with code 1001, and a new handshake to
+  `/fppdws/plugin?name=<name>` gets 410 until the plugin is loaded again.)
 
 ## F. Plugins that touch block devices
 
