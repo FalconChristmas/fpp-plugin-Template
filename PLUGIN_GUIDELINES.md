@@ -235,7 +235,12 @@ actually released needs a few things done deliberately, not by default:
   never `drogon::app().registerHandler()` directly. Drogon has no route-removal
   API, so a handler wired in directly stays in the router for the process
   lifetime; that alone makes a plugin impossible to unload or hot-swap for a
-  rebuilt version.
+  rebuilt version. The same goes for WebSockets: from FPP 10.4, serve them
+  with `FPPPlugins::registerPluginWebSocket()`/`unregisterPluginWebSocket()`
+  (`PluginWebSocket.h`, reached at `/fppdws/plugin?name=<name>`), never a
+  Drogon `WebSocketController` of your own. Unregistering also closes the
+  connections opened through it; drop any you kept in `shutdown()`. See
+  FPP's `docs/Plugin_Development.md`.
 - **Withdraw your own commands.** A `Command` you register with
   `CommandManager::addCommand()` is yours: in `shutdown()`, call
   `removeCommand()` for each one and delete it — `removeCommand()` only
@@ -890,7 +895,8 @@ on FPP's MQTT connection or fetching through `CurlManager` or `urlGet` counts
 as sending and must be disclosed in the `privacy` block exactly as if the
 plugin opened the socket itself. "My source contains no network call" is not a defence
 when every message goes out via core. HTTP routes registered with
-`registerPluginApi()` (or served from `api.php`) are the exception on the
+`registerPluginApi()` (or served from `api.php`) and WebSocket endpoints
+registered with `registerPluginWebSocket()` are the exception on the
 listening side: they are reached exactly as FPP's own pages are, so they are
 `remoteAccess: none`, and they are disclosed by what they do — data a route
 hands back is `collects`/`sends`, a change it makes is `systemChanges`.
@@ -1189,7 +1195,8 @@ identifiers (hashing phone numbers) where the feature allows.
       `postStart.sh` — install/upgrade/FPP-core-upgrade already cover it.
 - [ ] Native (C++) plugins: HTTP routes go through `registerPluginApi()`/
       `unregisterPluginApi()` (never `drogon::app().registerHandler()`
-      directly); `Makefile` includes `makefiles/common/setup.mk`; if claiming
+      directly), WebSockets through `registerPluginWebSocket()`/
+      `unregisterPluginWebSocket()` (never a `WebSocketController`); `Makefile` includes `makefiles/common/setup.mk`; if claiming
       `FPP_PLUGIN_SUPPORTS_UNLOAD()`, `shutdown()` withdraws+deletes every
       `addCommand()`-registered command and `nm -D lib<repoName>.so | awk
       '$2=="u"'` comes back empty.
