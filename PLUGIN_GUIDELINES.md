@@ -18,8 +18,7 @@ behaves like a good guest:
 
 - **One log file, and let FPP manage it.** Write all runtime logging to a single
   file in FPP's logs directory — don't scatter logs and don't roll your own
-  rotation. FPP rotates plugin logs aggressively for you (it keeps only the last
-  couple).
+  rotation. FPP rotates plugin logs for you.
 - **Clean up completely on uninstall.** Anything you set up *outside* your plugin
   folder — services, timers, cron jobs, symlinks, files under `/etc` — must be
   removed by your uninstall script, and that script must be safe to run twice.
@@ -82,11 +81,16 @@ relocated media directory still works. Do not open a second log, write into your
 plugin directory, use `/tmp`, or create dated/numbered variants yourself.
 
 1.2 **Do not implement your own rotation, truncation, or cleanup cron.** FPP
-rotates `plugin-*.log` for you — by size, keeping only the last **2** copies,
-compressed — using `copytruncate`, so you may hold the file open across a rotation
-without reopening it. (Do **not** open with truncate/`filemode="w"` as a poor-man's
-rotation — that discards the log every restart.) Rolling your own rotation fights
-FPP's.
+rotates `plugin-*.log` for you: once a day, any log over 10 MB is renamed to
+`.1` (older copies move up and are compressed; the last 7 are kept) and a new,
+empty log is created in its place. Because the old file is *renamed*, not
+emptied, a process that holds the log open keeps writing into the renamed copy,
+and nothing new appears in your log until it reopens the file. So open the log
+for each write (the PHP and shell snippets below do), or reopen it when it is
+replaced (Python's `WatchedFileHandler` below; in your own code, reopen on
+`SIGHUP` or when the file's inode changes). (Do **not** open with
+truncate/`filemode="w"` as a poor-man's rotation — that discards the log every
+restart.) Rolling your own rotation fights FPP's.
 
 1.3 **Nothing else logs.** Don't spam syslog, don't leave logs inside your plugin
 directory or `/tmp`, and don't log secrets (tokens, passwords, PATs). At the
@@ -114,11 +118,15 @@ file_put_contents($logFile, date('c') . ' your message' . "\n", FILE_APPEND | LO
 fall back to the default install path:
 
 ```python
-import os, logging
+import os, logging, logging.handlers
 
 logdir = os.environ.get('LOGDIR', '/home/fpp/media/logs')
+# WatchedFileHandler appends, and reopens the file after FPP rotates it (§1.2);
+# a plain FileHandler (what basicConfig(filename=...) uses) keeps writing to
+# the rotated copy.
+handler = logging.handlers.WatchedFileHandler(os.path.join(logdir, 'plugin-<repoName>.log'))
 logging.basicConfig(
-    filename=os.path.join(logdir, 'plugin-<repoName>.log'),  # default mode 'a' (append)
+    handlers=[handler],
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(message)s',
 )
@@ -137,6 +145,12 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') your message" >> "$PLUGIN_LOG"
 # background a helper into the same log:
 # nohup ./your-daemon.sh >> "$PLUGIN_LOG" 2>&1 &
 ```
+
+The `>>` on each `echo` opens the log afresh every time, so it follows a
+rotation. The `nohup … >> "$PLUGIN_LOG"` form opens it once for the life of the
+process: fine for a short-lived helper, but a daemon that runs for days keeps
+writing into the rotated copy (§1.2) — have a long-running daemon open the log
+itself and reopen it after a rotation.
 
 ### 2. Install / uninstall lifecycle
 
