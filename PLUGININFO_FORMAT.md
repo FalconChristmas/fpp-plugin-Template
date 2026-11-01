@@ -202,7 +202,7 @@ run well.
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `minMemoryMB` | integer | Minimum RAM (MB) to run acceptably. |
+| `minMemoryMB` | integer | Minimum RAM (MB) to run acceptably, compared with the RAM Linux reports (see below), which is less than the board's nominal size. |
 | `minCpuCores` | integer | Minimum recommended CPU cores. |
 
 The fields live at the **top level** of `pluginInfo.json` (next to `allowUpdates`),
@@ -212,6 +212,14 @@ them on every entry.
 
 How FPP compares them against the device (total RAM + CPU cores, detected
 automatically):
+
+- **RAM is what Linux reports, not what the board is sold as.** FPP compares
+  `minMemoryMB` with `MemTotal` from `/proc/meminfo`, which leaves out memory
+  the firmware, GPU and kernel keep for themselves, so it is always less than
+  the nominal size — a "1 GB" board reports somewhat under 1024 MB, and a
+  "512 MB" board under 512. Pick a value between board sizes: `768` means
+  "needs a 1 GB board", and `1024` would flag every 1 GB board as too small.
+  (Check `grep MemTotal /proc/meminfo` on your own board.)
 
 - **Advisory badge.** When a minimum isn't met, a muted `Not Enough RAM/CPU`
   badge appears on the plugin card / detail view, and the install button
@@ -223,7 +231,7 @@ automatically):
   the badge, and installing it pops a confirmation noting the shortfall (the
   values are self-reported, and a power user may know their setup is fine).
 
-Example — a plugin that wants 1 GB RAM and 2 CPU cores to run (top level,
+Example — a plugin that wants a 1 GB board and 2 CPU cores to run (top level,
 alongside `allowUpdates`, **not** inside a `versions[]` entry — FPP ignores them
 there):
 
@@ -231,7 +239,7 @@ there):
 {
     "repoName": "fpp-plugin-Example",
     "allowUpdates": 1,
-    "minMemoryMB": 1024,
+    "minMemoryMB": 768,
     "minCpuCores": 2,
     "versions": [
         { "minFPPVersion": "10.0", "maxFPPVersion": "0", "branch": "master", "sha": "" }
