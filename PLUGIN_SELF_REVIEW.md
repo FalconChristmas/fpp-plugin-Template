@@ -98,7 +98,13 @@ resolve when the file is loaded from FPP's `www/api/` directory — runs, or
 fails, on every API call FPP serves, for every user. If a plugin's `api.php`
 collides with a function FPP already defines, or fails to parse, FPP skips
 that plugin's API and writes one line to `apache2-error.log` (no error
-reaches the UI) — which is why the §1 log check catches this. If you just
+reaches the UI) — which is why the §1 log check catches this. That check
+only reads `api.php` itself, though: a file `api.php` includes is loaded on
+every API call too, its functions land in the same global namespace, and a
+name in it that FPP or another plugin already declares is a fatal error that
+takes down every plugin's API routes, not just yours (FPP 9 and earlier have no
+check at all). Prefix the names in included files too, or put them in a PHP
+`namespace`. If you just
 want a plain AJAX endpoint for your own page, call the file something else and
 reach it via `plugin.php?plugin=<repoName>&page=ajax.php&nopage=1`.
 
@@ -116,11 +122,31 @@ fails. A plugin
 that declares `apt` packages is also refused up front on a platform without
 `apt`, rather than half-installed.
 
+**Check each `versions[]` entry's FPP range against the FPP features you
+use.** Every FPP Command, overlay effect, API route and setting your plugin
+relies on has to exist in the oldest FPP release that entry claims. Older FPP
+usually ignores what it doesn't know rather than failing — an extra command
+argument is silently dropped — so a missing feature shows up as a blank matrix
+or a single colour, not an error. For example, the overlay `Image` effect
+first appeared in FPP 10.0-beta5, so a plugin that draws pictures through it
+shows nothing on FPP 9, even though a preview the plugin draws itself in the
+browser looks fine. Test on the oldest version you claim. And if every
+`versions[]` entry points at the same branch, every change you push —
+a ground-up rewrite included — goes to users on the older FPP versions too:
+either test there, or pin the older entries to a `sha` you did test.
+
 **`fpp_uninstall.sh` runs, then the directory is deleted no matter what.**
 `scripts/uninstall_plugin` ignores your script's exit code and `rm -rf`s the
 plugin directory afterwards. Whatever cleanup you need has to be in that
 script and correct on its own; there's no second chance and no error reaches
 the user.
+
+**Uninstall removes only what install created.** Check the two scripts against
+each other. If install copies a file only when it's missing
+(`[ -f X ] || cp … X`) and uninstall deletes it unconditionally, uninstall
+deletes a file the user — or another plugin — had before yours arrived. Keep
+such files inside your plugin directory, or record at install time that you
+created one, and remove it only if you did.
 
 **A plugin-only update runs `scripts/fpp_upgrade.sh` *instead of*
 `fpp_install.sh`, if you ship one.** (It has to be at `scripts/fpp_upgrade.sh`
@@ -130,7 +156,10 @@ also needs — build a native `.so`, create a directory — must be in both, or
 updates fall back to `fpp_install.sh` and you're already covered.
 If those updates aren't git commits (a prebuilt release binary, say), FPP
 won't see them without a `scripts/fpp_update_check.sh` to report them — see
-`PLUGININFO_FORMAT.md` › *Updates that aren't git commits*.
+`PLUGININFO_FORMAT.md` › *Updates that aren't git commits*. A
+`scripts/fpp_releasenotes.sh`, if you ship one, runs while the user waits on
+the Release Notes dialog: print a changelog you ship in the repo, don't fetch
+or build anything (guidelines §2.11).
 
 **You usually don't need to set `restartFlag`.** On FPP 10 the install asks
 fppd to load your plugin, and the uninstall asks it to unload, so neither
@@ -146,8 +175,11 @@ by restarting fppd yourself.
 Declare apt packages there and let FPP install them (guidelines §6). FPP
 records who asked for each one, and on uninstall only apt-removes a package
 when nobody else still claims it *and* apt confirms removing it wouldn't drag
-anything else off the box; a package that was already on the image is marked
-as the system's and stays. A package you instead `apt-get install` yourself
+anything else off the box; from FPP 10.2, a package that was already on the
+box before your plugin asked for it is left installed. (FPP 10.0 and 10.1 can
+remove one that was only there as another package's dependency — `ffmpeg` on
+some images — so if you support those versions, check what your uninstall
+removes there.) A package you instead `apt-get install` yourself
 from `fpp_install.sh` is untracked — it also isn't reinstalled after an FPP OS
 upgrade, so prefer the declared list. One thing to watch either way:
 `apt-get install <pkg>` on a package that's *already installed* upgrades it to
@@ -212,11 +244,48 @@ with a generic name (`getStatus`, `save`, `Config`) another plugin might also
 declare? Prefix every global name with your plugin's, so two plugins can be
 installed at once.
 
+Your `callbacks` script must never make fppd wait. fppd runs a media or
+playlist callback from its main loop and waits for the script to exit, with no
+time limit; while it waits, the scheduler, FPP Commands, MultiSync and GPIO
+all wait too, and the show drifts from its schedule. That's true of a short
+wait, a wait with a cap, and a wait that only happens after something has
+gone wrong (respawning a crashed daemon, say) — don't hold the callback for a
+server, for devices to load, or for a sync point. Hand the work to your daemon
+and return straight away: the playlist should run exactly the same with your
+plugin installed as without it. If the operator genuinely wants a gap between
+songs, that's a Pause entry in their playlist, not a delay in your plugin.
+
+Shared folders need care too. Anything you create outside your own folders —
+in `media/logs`, `media/scripts`, the fonts folder, `/etc/sudoers.d`,
+`/usr/local/bin` — should have a name that starts with your `repoName`, so
+it's obviously yours. Only ever delete files you created: no removing generic
+names like `sms_plugin.log` or `start.sh` that could belong to someone else,
+and no `chown -R`/`chmod -R` on a folder you share with FPP and other plugins
+(`media/config`, `media/logs`).
+
+Never write into FPP's own install (`${FPPDIR}`, normally `/opt/fpp`), not
+even a small redirect page under `${FPPDIR}/www`. Besides being off-limits
+(guidelines §5), FPP doesn't know the file is there: switching FPP to another
+branch runs `git clean`, which silently deletes it. If you want a short,
+memorable URL for a page, show its full
+`plugin.php?plugin=<repoName>&page=<page>&nopage=1` address on your plugin's
+own help page instead.
+
 **As the person using it from a phone in the yard.** Toggle FPP's dark theme
 and look at every page. Shrink the browser to phone width. Does it use FPP's
 `PrintSetting*` helpers and Bootstrap classes, or its own CSS and colours
 (guidelines §8)? Does a failed action tell the user what went wrong, or fail
 silently? Is the terminology FPP's?
+
+If your plugin talks to an internet service, unplug the network, then set the
+box's clock a day wrong, and see what the page says. Many FPP boxes have no
+battery-backed clock and sit on show networks with no time server, so a wrong
+date — and the certificate errors it causes — is routine, not exotic. Keep the
+real error (`curl_error()` or your language's equivalent) and, for a
+certificate failure, tell the user to check the device's date and time rather
+than "check your internet". Don't let anything that expires (a pairing code, a
+token) depend on the box's own clock being right. And show every warning your
+backend sends back, rather than leaving the page on "Waiting…".
 
 **As a stranger reading it fresh.** Read your own code as someone who's never
 seen it and doesn't assume the best. Is there a "temporary" debug endpoint, a
@@ -226,6 +295,26 @@ if uncommented? Does the plugin do anything not described in its README and
 binary nobody can read, a payment link for you rather than for the show owner
 (guidelines §10–§12)? If your honest answer to "why is this here?" is "I
 forgot to take it out," take it out.
+
+A few that are easy to miss:
+
+- **A price is a payment reference, even with no link.** §10 bans referencing
+  payment, not just linking to it, so "a license unlocks it for $5" in the
+  README or a page breaks it too.
+- **Someone else's repo, cloned unpinned, is `curl | bash` by another name.**
+  If you `git clone` another project and run its code, pin it to a commit;
+  otherwise every install runs whatever is on their branch that day.
+- **Updates go through FPP.** A plugin that downloads and swaps in a new
+  binary itself bypasses FPP's update path — including the privacy
+  re-confirmation FPP asks for when an update changes your privacy block.
+  Ship updates as git commits, or report them with
+  `scripts/fpp_update_check.sh` and apply them in `scripts/fpp_upgrade.sh`.
+- **FPP's configuration backup contains its passwords.** A backup from
+  `/api/backups/configuration` or a zip of the config folder includes FPP's
+  passwords, the WiFi passphrase and tokens. Sending one off the box counts
+  as reading FPP's credentials, whatever the feature is called — allowed
+  only when it's needed for the stated purpose and declared as a
+  `reads-core-credentials` system change (guidelines §14.9).
 
 ## C. Testing an install for real, on a box you can re-image
 
@@ -386,6 +475,16 @@ If your plugin has a test suite, run it. If it doesn't, the ten minutes of
 real use in §1 is your test suite; make them count.
 
 ## What this doesn't replace
+
+When the automated check flags something, fix what the code *does*, not the
+text the check matched. Rewriting a wait in `preStop.sh` so the word `sleep`
+no longer appears — a `timeout 2 tail --pid=…` in place of a polling loop —
+stops the check matching, but fppd can still be held for the same two seconds
+(§D); adding `set -e` as the last line of a script makes the finding go away
+and changes nothing. A maintainer reads the change, so a fix that only
+satisfies the pattern just comes back as a manual finding. That goes double if
+an AI assistant is making the fixes for you: ask it what the check is
+protecting against, and check its fix against that.
 
 The automated check still runs on your listing issue and a maintainer still
 reads the submission. If a finding looks wrong to you, comment `/submit` on the
